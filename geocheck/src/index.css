@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #18283b; background: #f4f7fb; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+.app-shell { min-height: 100vh; padding: 24px 16px 48px; }
+.app-header { text-align: center; margin: 0 auto 24px; }
+.brand-mark { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; margin: 0 auto 12px; background: #12315a; color: white; font-size: 34px; }
+.app-header h1 { margin: 0; font-size: clamp(24px, 5vw, 30px); letter-spacing: -.04em; color: #12315a; }
+.app-header p { margin: 6px 0 0; color: #6b7788; font-size: 14px; }
+.content { max-width: 520px; margin: auto; display: grid; gap: 14px; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #e6ebf2; border-radius: 13px; padding: 4px; }
+.tab { border: 0; background: transparent; border-radius: 10px; padding: 11px; text-transform: capitalize; color: #657286; }
+.tab.active { background: white; color: #12315a; box-shadow: 0 1px 4px #0b23421a; font-weight: 650; }
+.panel { background: white; border: 1px solid #e2e8f0; border-radius: 17px; padding: 18px; box-shadow: 0 3px 12px #12315a08; }
+.panel h2 { font-size: 14px; letter-spacing: .04em; text-transform: uppercase; color: #64748b; margin: 0 0 13px; }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.panel-heading h2 { margin-bottom: 8px; }
+input { width: 100%; border: 1px solid #cbd5e1; border-radius: 11px; padding: 13px 14px; color: #12315a; outline: none; }
+input:focus { border-color: #5278ad; box-shadow: 0 0 0 3px #dbeafe; }
+.hint { font-size: 12px; line-height: 1.5; color: #7a8798; margin: 9px 0 0; }
+.hint.success { color: #15803d; }
+.pill { display: inline-flex; align-items: center; border-radius: 99px; padding: 5px 9px; font-size: 11px; font-weight: 650; color: #12315a; background: #e8eef7; white-space: nowrap; }
+.pill.green { background: #dcfce7; color: #166534; }
+.status-box { border-radius: 11px; padding: 12px; font-size: 13px; background: #f1f5f9; color: #475569; margin: 10px 0; }
+.status-box.inside { background: #dcfce7; color: #166534; }
+.status-box.outside, .status-box.error { background: #fee2e2; color: #991b1b; }
+.secondary-button { width: 100%; border: 1px solid #cbd5e1; background: white; color: #12315a; border-radius: 10px; padding: 10px; font-size: 13px; font-weight: 600; }
+.camera-frame { width: 100%; aspect-ratio: 4/3; border-radius: 12px; overflow: hidden; background: #e2e8f0; display: grid; place-items: center; }
+.camera-video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.hidden { display: none; }
+.camera-placeholder { padding: 20px; text-align: center; color: #64748b; font-size: 13px; }
+.camera-placeholder span { font-size: 42px; color: #94a3b8; }
+.camera-placeholder p { margin: 4px 0 0; }
+.camera-frame + .secondary-button { margin-top: 10px; }
+.demo-panel summary { color: #64748b; text-transform: uppercase; font-size: 12px; font-weight: 700; cursor: pointer; }
+.mode-buttons { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-top: 12px; }
+.mode-button { background: #f1f5f9; color: #64748b; border: 0; border-radius: 9px; padding: 9px 4px; font-size: 11px; }
+.mode-button.selected { background: #12315a; color: white; }
+.primary-button { border: 0; width: 100%; padding: 15px; border-radius: 13px; background: #12315a; color: white; font-weight: 700; box-shadow: 0 4px 10px #12315a20; }
+.primary-button:hover:not(:disabled) { background: #0b2342; }
+.message { margin: 0; color: #b91c1c; font-size: 13px; text-align: center; }
+.footnote { text-align: center; font-size: 11px; line-height: 1.5; color: #8490a0; margin: -3px 10px 0; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 20; background: #0b2342a8; display: grid; place-items: center; padding: 20px; }
+.result-card { background: white; border-radius: 20px; padding: 28px; width: min(100%, 390px); text-align: center; box-shadow: 0 20px 70px #0003; }
+.result-card h2 { color: #12315a; margin: 12px 0; }
+.result-card p { font-size: 14px; }
+.result-icon { margin: auto; width: 50px; height: 50px; display: grid; place-items: center; border-radius: 50%; background: #dcfce7; color: #15803d; font-size: 28px; }
+.result-card .primary-button { margin-top: 16px; }
+@media (min-width: 640px) { .app-shell { padding-top: 36px; } }
