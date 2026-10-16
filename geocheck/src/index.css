@@ -91,3 +91,5 @@ input:focus { border-color: #5278ad; box-shadow: 0 0 0 3px #dbeafe; }
 .admin-empty { color:#64748b; font-size:13px; padding:12px; }
 @media (max-width: 850px) { .admin-grid { grid-template-columns:1fr; } .admin-filters { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width: 520px) { .admin-day-row { grid-template-columns:1fr 1fr; } .admin-day-row > label:first-child { grid-column:1 / -1; } .admin-filters { grid-template-columns:1fr; } .admin-header { align-items:flex-start; } }
+
+.late-reason-panel label,.proof-upload {display:block;margin:12px 0;font-size:13px;color:#334155}.late-reason-panel select,.late-reason-panel textarea,.late-reason-panel input[type=file],.proof-upload input {display:block;width:100%;box-sizing:border-box;margin-top:6px;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff}.late-reason-panel textarea{min-height:90px}.late-reason-panel small{display:block;color:#64748b;margin-top:5px}.proof-upload{font-weight:600}.proof-upload input{font-weight:400}
