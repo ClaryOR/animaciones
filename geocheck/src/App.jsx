@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { EMPLOYEES, SHOW_DEMO_PANEL, WORK_SITE } from './lib/config.js';
+import { SHOW_DEMO_PANEL, WORK_SITE } from './lib/config.js';
+import Admin, { getActiveEmployeeByPin, getActiveSites } from './Admin.jsx';
 import { evaluateArea, getPosition } from './lib/geo.js';
 import { makePlaceholderPhoto, drawStamp } from './lib/photo.js';
 import { submitAttendance } from './lib/api.js';
@@ -8,6 +9,7 @@ import { capitalize, formatDay, formatTime } from './lib/format.js';
 export default function App() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const [adminMode, setAdminMode] = useState(false);
   const [pin, setPin] = useState('');
   const [mode, setMode] = useState('real');
   const [tipo, setTipo] = useState('entrada');
@@ -19,7 +21,9 @@ export default function App() {
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
   const simulated = mode !== 'real';
-  const employee = EMPLOYEES[pin];
+  const employee = getActiveEmployeeByPin(pin);
+  const activeSites = getActiveSites();
+  const workSite = activeSites.find(site => site.id === employee?.siteId) || activeSites[0] || WORK_SITE;
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(track => track.stop());
@@ -58,7 +62,7 @@ export default function App() {
     setLocationStatus('checking');
     setMessage('');
     try {
-      const position = await getPosition(mode, WORK_SITE);
+      const position = await getPosition(mode, workSite);
       const evaluated = evaluateArea(position, WORK_SITE);
       setLocationInfo(evaluated);
       setLocationStatus(evaluated.inside ? 'inside' : 'outside');
@@ -68,11 +72,11 @@ export default function App() {
       setMessage(err.message || 'No se pudo obtener la ubicación.');
       return null;
     }
-  }, [mode]);
+  }, [mode, workSite]);
 
   const capturePhoto = () => {
     const now = new Date();
-    const lines = [`GeoCheck · ${WORK_SITE.name} · ${tipo}`, `${capitalize(formatDay(now))} · ${formatTime(now)}`];
+    const lines = [`GeoCheck · ${workSite.name} · ${tipo}`, `${capitalize(formatDay(now))} · ${formatTime(now)}`];
     if (cameraStatus === 'ready' && videoRef.current?.videoWidth) {
       const video = videoRef.current;
       const canvas = document.createElement('canvas');
@@ -88,7 +92,7 @@ export default function App() {
   const register = async () => {
     if (busy) return;
     setMessage('');
-    if (!employee) { setMessage('Introduce un NIP válido de 4 dígitos. Prueba 1234 en modo demo.'); return; }
+    if (!employee) { setMessage('Introduce un NIP válido de 4 dígitos. Verifica el NIP del empleado en administración.'); return; }
     if (!simulated && cameraStatus !== 'ready') { setMessage('Activa la cámara antes de registrar.'); return; }
     setBusy(true);
     try {
@@ -100,7 +104,7 @@ export default function App() {
       const now = new Date();
       const record = {
         id: globalThis.crypto?.randomUUID?.() ?? String(now.getTime()),
-        tipo, employeeId: employee.id, name: employee.name, siteName: WORK_SITE.name,
+        tipo, employeeId: employee.id, name: employee.name, siteName: workSite.name, siteId: workSite.id,
         inside: true, distance: area.distance, accuracy: area.accuracy, timestamp: now.toISOString(), photo
       };
       await submitAttendance(record);
@@ -116,11 +120,13 @@ export default function App() {
     if (!simulated) startCamera();
   };
 
+  if (adminMode) return <div className="app-shell"><Admin onBack={() => setAdminMode(false)} /></div>;
+
   return <div className="app-shell">
     <header className="app-header">
       <div className="brand-mark" aria-hidden="true">⌖</div>
       <h1>GeoCheck Checador</h1>
-      <p>Registro de asistencia</p>
+      <p>Registro de asistencia</p><button className="admin-open-button" onClick={() => setAdminMode(true)}>Administración</button>
     </header>
     <main className="content">
       <div className="tabs">
@@ -129,10 +135,10 @@ export default function App() {
       <section className="panel">
         <h2>1. NIP del empleado</h2>
         <input aria-label="NIP de cuatro dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={pin} onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setMessage(''); }} placeholder="Introduce 4 dígitos" />
-        <p className={employee ? 'hint success' : 'hint'}>{employee ? `Empleado: ${employee.name}` : 'NIP de demostración: 1234, 4821 o 7305'}</p>
+        <p className={employee ? 'hint success' : 'hint'}>{employee ? `Empleado: ${employee.name}` : 'Introduce tu NIP de empleado activo'}</p>
       </section>
       <section className="panel">
-        <div className="panel-heading"><h2>2. Ubicación</h2><span className="pill">{WORK_SITE.name}</span></div>
+        <div className="panel-heading"><h2>2. Ubicación</h2><span className="pill">{workSite.name}</span></div>
         <p className="hint">Radio permitido: {WORK_SITE.radiusM} m</p>
         <div className={`status-box ${locationStatus}`}>
           {locationStatus === 'checking' ? 'Consultando ubicación…' :
