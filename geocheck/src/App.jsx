@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SHOW_DEMO_PANEL, WORK_SITE } from './lib/config.js';
-import Admin, { getActiveEmployeeByPin, getActiveSites } from './Admin.jsx';
+import Admin, { getActiveEmployeeByPin, getActiveSites, getLateReasons } from './Admin.jsx';
 import { evaluateArea, getPosition } from './lib/geo.js';
 import { makePlaceholderPhoto, drawStamp } from './lib/photo.js';
 import { submitAttendance } from './lib/api.js';
@@ -20,6 +20,13 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
+  const [lateReason, setLateReason] = useState('');
+  const [lateOther, setLateOther] = useState('');
+  const [medicalProof, setMedicalProof] = useState(null);
+  const lateReasons = getLateReasons();
+  const todaySchedule = employee?.schedule?.[['sun','mon','tue','wed','thu','fri','sat'][new Date().getDay()]];
+  const lateMinutes = todaySchedule?.work ? Math.floor((Date.now() - new Date(new Date().toDateString() + ' ' + todaySchedule.start).getTime()) / 60000) : 0;
+  const isLate = tipo === 'entrada' && Boolean(todaySchedule?.work) && lateMinutes > Number(employee?.tolerances?.late ?? 5);
   const simulated = mode !== 'real';
   const employee = getActiveEmployeeByPin(pin);
   const activeSites = getActiveSites();
@@ -93,6 +100,9 @@ export default function App() {
     if (busy) return;
     setMessage('');
     if (!employee) { setMessage('Introduce un NIP válido de 4 dígitos. Verifica el NIP del empleado en administración.'); return; }
+    if (tipo === 'entrada' && !todaySchedule?.work) { setMessage('Hoy figura como día libre en el horario del empleado. Contacta con administración si esto es incorrecto.'); return; }
+    if (isLate && !lateReason) { setMessage('Selecciona un motivo de retraso antes de registrar la entrada.'); return; }
+    if (isLate && lateReason === 'Otro' && !lateOther.trim()) { setMessage('Explica el motivo en el campo Otro.'); return; }
     if (!simulated && cameraStatus !== 'ready') { setMessage('Activa la cámara antes de registrar.'); return; }
     setBusy(true);
     try {
@@ -105,7 +115,8 @@ export default function App() {
       const record = {
         id: globalThis.crypto?.randomUUID?.() ?? String(now.getTime()),
         tipo, employeeId: employee.id, name: employee.name, siteName: workSite.name, siteId: workSite.id,
-        inside: true, distance: area.distance, accuracy: area.accuracy, device: navigator.userAgent || 'Dispositivo no identificado', timestamp: now.toISOString(), photo
+        inside: true, distance: area.distance, accuracy: area.accuracy, device: navigator.userAgent || 'Dispositivo no identificado', timestamp: now.toISOString(), photo,
+        late: isLate, lateReason: isLate ? lateReason : '', lateReasonDetail: isLate && lateReason === 'Otro' ? lateOther.trim() : '', medicalProof: medicalProof || null
       };
       await submitAttendance(record);
       stopCamera();
@@ -114,7 +125,7 @@ export default function App() {
   };
 
   const closeResult = () => {
-    setResult(null); setPin(''); setLocationStatus('idle'); setLocationInfo(null);
+    setResult(null); setPin(''); setLocationStatus('idle'); setLocationInfo(null); setLateReason(''); setLateOther(''); setMedicalProof(null);
     setTipo(current => current === 'entrada' ? 'salida' : 'entrada');
     setMessage('');
     if (!simulated) startCamera();
@@ -164,7 +175,7 @@ export default function App() {
         </div>
       </details>}
       {message && <p className="message" role="alert">{message}</p>}
-      <button className="primary-button" onClick={register} disabled={busy || pin.length !== 4 || (!simulated && cameraStatus !== 'ready')}>
+      <button className="primary-button" onClick={register} disabled={busy || pin.length !== 4 || (!simulated && cameraStatus !== 'ready') || (isLate && (!lateReason || (lateReason === 'Otro' && !lateOther.trim())))}>
         {busy ? 'Registrando…' : `Registrar ${tipo}`}
       </button>
       <p className="footnote">La versión de demostración guarda los metadatos localmente en este navegador.</p>
@@ -173,7 +184,7 @@ export default function App() {
       <div className="result-card">
         <div className="result-icon">✓</div><h2 id="result-title">¡Registro completado!</h2>
         <p><strong>{result.name}</strong></p><p>{result.tipo === 'entrada' ? 'Entrada' : 'Salida'} · {new Date(result.timestamp).toLocaleString('es-VE')}</p>
-        <p className="hint">{result.siteName} · {result.distance} m del centro</p>
+        <p className="hint">{result.siteName} · {result.distance} m del centro</p>{result.late && <p className="hint">Retraso: {result.lateReason}{result.lateReasonDetail ? ' — ' + result.lateReasonDetail : ''}</p>}
         <button className="primary-button" onClick={closeResult}>Continuar</button>
       </div>
     </div>}
