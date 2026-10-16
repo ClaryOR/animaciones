@@ -24,7 +24,6 @@ export default function App() {
   const employee = getActiveEmployeeByPin(pin);
   const activeSites = getActiveSites();
   const workSite = activeSites.find(site => site.id === employee?.siteId) || activeSites[0] || WORK_SITE;
-  if (adminMode) return <div className="app-shell"><Admin onBack={() => setAdminMode(false)} /></div>;
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(track => track.stop());
@@ -120,6 +119,8 @@ export default function App() {
     setMessage('');
     if (!simulated) startCamera();
   };
+
+  if (adminMode) return <div className="app-shell"><Admin onBack={() => setAdminMode(false)} /></div>;
 
   return <div className="app-shell">
     <header className="app-header">
