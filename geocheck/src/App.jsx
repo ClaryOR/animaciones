@@ -63,7 +63,7 @@ export default function App() {
     setMessage('');
     try {
       const position = await getPosition(mode, workSite);
-      const evaluated = evaluateArea(position, WORK_SITE);
+      const evaluated = evaluateArea(position, { ...workSite, accuracyM: workSite.accuracyM ?? 100 });
       setLocationInfo(evaluated);
       setLocationStatus(evaluated.inside ? 'inside' : 'outside');
       return evaluated;
@@ -105,7 +105,7 @@ export default function App() {
       const record = {
         id: globalThis.crypto?.randomUUID?.() ?? String(now.getTime()),
         tipo, employeeId: employee.id, name: employee.name, siteName: workSite.name, siteId: workSite.id,
-        inside: true, distance: area.distance, accuracy: area.accuracy, timestamp: now.toISOString(), photo
+        inside: true, distance: area.distance, accuracy: area.accuracy, device: navigator.userAgent || 'Dispositivo no identificado', timestamp: now.toISOString(), photo
       };
       await submitAttendance(record);
       stopCamera();
@@ -139,7 +139,7 @@ export default function App() {
       </section>
       <section className="panel">
         <div className="panel-heading"><h2>2. Ubicación</h2><span className="pill">{workSite.name}</span></div>
-        <p className="hint">Radio permitido: {WORK_SITE.radiusM} m</p>
+        <p className="hint">Radio permitido: {workSite.radiusM} m · Accuracy máximo: {workSite.accuracyM ?? 100} m</p>
         <div className={`status-box ${locationStatus}`}>
           {locationStatus === 'checking' ? 'Consultando ubicación…' :
            locationStatus === 'inside' ? `Dentro del área · ${locationInfo?.distance} m · precisión ±${locationInfo?.accuracy} m` :
