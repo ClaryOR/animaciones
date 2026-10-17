@@ -169,7 +169,7 @@ export default function App() {
   return <div className="app-shell employee-app">
     <header className="app-header">
       <button className="back-home-button" onClick={() => { setHomeScreen(true); stopCamera(); }}>← Inicio</button>
-      <div className="brand-mark" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="20" cy="20" r="13" fill="none" stroke="currentColor" strokeWidth="4"/><path d="M29 29l11 11" stroke="#FF6B4A" strokeWidth="4" strokeLinecap="round"/><path d="M14 20l4 4 8-9" fill="none" stroke="#FF6B4A" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+      <div className="brand-mark" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="20" cy="20" r="13" fill="none" stroke="currentColor" strokeWidth="4"/><path d="M29 29l11 11" stroke="#FF6B4A" strokeWidth="4" strokeLinecap="round"/><circle cx="20" cy="20" r="4" fill="#FF6B4A"/></svg></div>
       <h1>Quia Check</h1>
       <p>Registro de asistencia</p>
     </header>
