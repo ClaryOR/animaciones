@@ -23,6 +23,7 @@ export default function App() {
   const [lateReason, setLateReason] = useState('');
   const [lateOther, setLateOther] = useState('');
   const [medicalProof, setMedicalProof] = useState(null);
+  const [capturedPhoto, setCapturedPhoto] = useState('');
   const simulated = mode !== 'real';
   const employee = getActiveEmployeeByPin(pin);
   const activeSites = getActiveSites();
@@ -96,6 +97,13 @@ export default function App() {
     return simulated ? makePlaceholderPhoto(lines) : null;
   };
 
+  const takePhoto = () => {
+    const photo = capturePhoto();
+    if (!photo) { setMessage('No se pudo tomar la foto. Activa la cámara y concede el permiso en el navegador.'); return; }
+    setCapturedPhoto(photo);
+    setMessage('Evidencia fotográfica capturada.');
+  };
+
   const register = async () => {
     if (busy) return;
     setMessage('');
@@ -103,14 +111,14 @@ export default function App() {
     if (tipo === 'entrada' && !todaySchedule?.work) { setMessage('Hoy figura como día libre en el horario del empleado. Contacta con administración si esto es incorrecto.'); return; }
     if (isLate && !lateReason) { setMessage('Selecciona un motivo de retraso antes de registrar la entrada.'); return; }
     if (isLate && lateReason === 'Otro' && !lateOther.trim()) { setMessage('Explica el motivo en el campo Otro.'); return; }
+    if (locationStatus !== 'inside' || !locationInfo?.inside) { setMessage('Primero verifica que la ubicación esté dentro del área permitida.'); return; }
+    if (!capturedPhoto) { setMessage('Toma la fotografía de evidencia antes de registrar.'); return; }
     if (!simulated && cameraStatus !== 'ready') { setMessage('Activa la cámara antes de registrar.'); return; }
     setBusy(true);
     try {
-      const area = await checkLocation();
-      if (!area) return;
-      if (!area.inside) { setMessage('Estás fuera del área permitida. No se registró la asistencia.'); return; }
-      const photo = capturePhoto();
-      if (!photo) { setMessage('No se pudo tomar la foto. Comprueba los permisos de cámara.'); return; }
+      const area = locationInfo;
+      if (!area || !area.inside || locationStatus !== 'inside') { setMessage('Verifica la ubicación antes de registrar.'); return; }
+      const photo = capturedPhoto;
       const now = new Date();
       const record = {
         id: globalThis.crypto?.randomUUID?.() ?? String(now.getTime()),
@@ -125,7 +133,7 @@ export default function App() {
   };
 
   const closeResult = () => {
-    setResult(null); setPin(''); setLocationStatus('idle'); setLocationInfo(null); setLateReason(''); setLateOther(''); setMedicalProof(null);
+    setResult(null); setPin(''); setLocationStatus('idle'); setLocationInfo(null); setLateReason(''); setLateOther(''); setMedicalProof(null); setCapturedPhoto('');
     setTipo(current => current === 'entrada' ? 'salida' : 'entrada');
     setMessage('');
     if (!simulated) startCamera();
@@ -141,15 +149,15 @@ export default function App() {
     </header>
     <main className="content">
       <div className="tabs">
-        {['entrada', 'salida'].map(value => <button key={value} className={tipo === value ? 'tab active' : 'tab'} onClick={() => setTipo(value)}>{value}</button>)}
+        {['entrada', 'salida'].map(value => <button key={value} className={tipo === value ? 'tab active' : 'tab'} onClick={() => { setTipo(value); setCapturedPhoto(''); setLocationStatus('idle'); setLocationInfo(null); setMessage(''); }}>{value}</button>)}
       </div>
       <section className="panel">
-        <h2>1. NIP del empleado</h2>
-        <input aria-label="NIP de cuatro dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={pin} onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setMessage(''); }} placeholder="Introduce 4 dígitos" />
+        <h2>1. NIP del empleado <span className="required-star" aria-label="obligatorio">*</span></h2>
+        <input aria-label="NIP de cuatro dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={pin} onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setMessage(''); setCapturedPhoto(''); }} placeholder="Introduce 4 dígitos" />
         <p className={employee ? 'hint success' : 'hint'}>{employee ? `Empleado: ${employee.name}` : 'Introduce tu NIP de empleado activo'}</p>
       </section>
       <section className="panel">
-        <div className="panel-heading"><h2>2. Ubicación</h2><span className="pill">{workSite.name}</span></div>
+        <div className="panel-heading"><h2>2. Ubicación <span className="required-star" aria-label="obligatorio">*</span></h2><span className="pill">{workSite.name}</span></div>
         <p className="hint">Radio permitido: {workSite.radiusM} m · Accuracy máximo: {workSite.accuracyM ?? 100} m</p>
         <div className={`status-box ${locationStatus}`}>
           {locationStatus === 'checking' ? 'Consultando ubicación…' :
@@ -160,12 +168,14 @@ export default function App() {
         <button className="secondary-button" onClick={checkLocation} disabled={locationStatus === 'checking'}>Verificar ubicación</button>
       </section>
       <section className="panel">
-        <div className="panel-heading"><h2>3. Evidencia fotográfica</h2><span className={cameraStatus === 'ready' ? 'pill green' : 'pill'}>{simulated ? 'Modo de prueba' : cameraStatus === 'ready' ? 'Cámara activa' : cameraStatus === 'starting' ? 'Abriendo cámara…' : 'Cámara inactiva'}</span></div>
+        <div className="panel-heading"><h2>3. Evidencia fotográfica <span className="required-star" aria-label="obligatorio">*</span></h2><span className={cameraStatus === 'ready' ? 'pill green' : 'pill'}>{simulated ? 'Modo de prueba' : cameraStatus === 'ready' ? 'Cámara activa' : cameraStatus === 'starting' ? 'Abriendo cámara…' : 'Cámara inactiva'}</span></div>
         <div className="camera-frame">
           <video ref={videoRef} autoPlay muted playsInline className={cameraStatus === 'ready' ? 'camera-video' : 'camera-video hidden'} />
           {cameraStatus !== 'ready' && <div className="camera-placeholder"><span>◎</span><p>{simulated ? 'Se usará una imagen de prueba' : cameraError || 'La vista previa aparecerá aquí'}</p></div>}
         </div>
         {cameraStatus !== 'ready' && <button className="secondary-button" onClick={startCamera}>Activar cámara</button>}
+        {cameraStatus === 'ready' && <button className="secondary-button" onClick={takePhoto}>Tomar foto de evidencia</button>}
+        {capturedPhoto && <div className="captured-evidence"><img src={capturedPhoto} alt="Fotografía de evidencia capturada" /><p>✓ Fotografía capturada</p><button type="button" className="secondary-button" onClick={takePhoto}>Tomar otra foto</button></div>}
       </section>
       {SHOW_DEMO_PANEL && <details className="panel demo-panel">
         <summary>Modo de pruebas</summary>
@@ -175,7 +185,7 @@ export default function App() {
         </div>
       </details>}
       {message && <p className="message" role="alert">{message}</p>}
-      <button className="primary-button" onClick={register} disabled={busy || pin.length !== 4 || (!simulated && cameraStatus !== 'ready') || (isLate && (!lateReason || (lateReason === 'Otro' && !lateOther.trim())))}>
+      <button className="primary-button" onClick={register} disabled={busy || !employee || pin.length !== 4 || locationStatus !== 'inside' || !locationInfo?.inside || !capturedPhoto || (!simulated && cameraStatus !== 'ready') || (isLate && (!lateReason || (lateReason === 'Otro' && !lateOther.trim())))}>
         {busy ? 'Registrando…' : `Registrar ${tipo}`}
       </button>
       <p className="footnote">La versión de demostración guarda los metadatos localmente en este navegador.</p>
