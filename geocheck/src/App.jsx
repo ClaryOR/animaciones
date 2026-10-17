@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { EMPLOYEES, SHOW_DEMO_PANEL, WORK_SITE } from './lib/config.js';
+import { SHOW_DEMO_PANEL, WORK_SITE } from './lib/config.js';
+import Admin, { getActiveEmployeeByPin, getActiveSites, getLateReasons } from './Admin.jsx';
 import { evaluateArea, getPosition } from './lib/geo.js';
 import { makePlaceholderPhoto, drawStamp } from './lib/photo.js';
 import { submitAttendance } from './lib/api.js';
@@ -8,6 +9,8 @@ import { capitalize, formatDay, formatTime } from './lib/format.js';
 export default function App() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const [adminMode, setAdminMode] = useState(false);
+  const [homeScreen, setHomeScreen] = useState(true);
   const [pin, setPin] = useState('');
   const [mode, setMode] = useState('real');
   const [tipo, setTipo] = useState('entrada');
@@ -18,8 +21,23 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
+  const [lateReason, setLateReason] = useState('');
+  const [lateOther, setLateOther] = useState('');
+  const [dayOffReason, setDayOffReason] = useState('');
+  const [selectedSiteId, setSelectedSiteId] = useState('');
+  const [medicalProof, setMedicalProof] = useState(null);
+  const [capturedPhoto, setCapturedPhoto] = useState('');
   const simulated = mode !== 'real';
-  const employee = EMPLOYEES[pin];
+  const employee = getActiveEmployeeByPin(pin);
+  const activeSites = getActiveSites();
+  const lateReasons = getLateReasons();
+  const todaySchedule = employee?.schedule?.[['sun','mon','tue','wed','thu','fri','sat'][new Date().getDay()]];
+  const lateMinutes = todaySchedule?.work ? Math.floor((Date.now() - new Date(new Date().toDateString() + ' ' + todaySchedule.start).getTime()) / 60000) : 0;
+  const isLate = tipo === 'entrada' && Boolean(todaySchedule?.work) && lateMinutes > Number(employee?.tolerances?.late ?? 5);
+  const assignedSite = activeSites.find(site => site.id === employee?.siteId) || activeSites[0] || WORK_SITE;
+  const canChooseSite = Boolean(employee?.allowSiteSelection && tipo === 'entrada');
+  const fieldLocation = Boolean(canChooseSite && employee?.allowUnregisteredSite && selectedSiteId === '__unregistered__');
+  const workSite = (canChooseSite && selectedSiteId && selectedSiteId !== '__unregistered__' ? activeSites.find(site => site.id === selectedSiteId) : null) || assignedSite;
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(track => track.stop());
@@ -51,15 +69,19 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => { startCamera(); return () => streamRef.current?.getTracks().forEach(track => track.stop()); }, [startCamera]);
+  useEffect(() => {
+    if (homeScreen || adminMode) { stopCamera(); return undefined; }
+    startCamera();
+    return () => streamRef.current?.getTracks().forEach(track => track.stop());
+  }, [startCamera, stopCamera, homeScreen, adminMode]);
   useEffect(() => { setLocationStatus('idle'); setLocationInfo(null); }, [mode]);
 
   const checkLocation = useCallback(async () => {
     setLocationStatus('checking');
     setMessage('');
     try {
-      const position = await getPosition(mode, WORK_SITE);
-      const evaluated = evaluateArea(position, WORK_SITE);
+      const position = await getPosition(mode, workSite);
+      const evaluated = fieldLocation ? { pos: position, distance: 0, accuracy: position.accuracy, inside: true, field: true } : evaluateArea(position, { ...workSite, accuracyM: workSite.accuracyM ?? 100 });
       setLocationInfo(evaluated);
       setLocationStatus(evaluated.inside ? 'inside' : 'outside');
       return evaluated;
@@ -68,11 +90,11 @@ export default function App() {
       setMessage(err.message || 'No se pudo obtener la ubicación.');
       return null;
     }
-  }, [mode]);
+  }, [mode, workSite, fieldLocation]);
 
   const capturePhoto = () => {
     const now = new Date();
-    const lines = [`GeoCheck · ${WORK_SITE.name} · ${tipo}`, `${capitalize(formatDay(now))} · ${formatTime(now)}`];
+    const lines = [`GeoCheck · ${fieldLocation ? 'Lugar no registrado' : workSite.name} · ${tipo}`, `${capitalize(formatDay(now))} · ${formatTime(now)}`];
     if (cameraStatus === 'ready' && videoRef.current?.videoWidth) {
       const video = videoRef.current;
       const canvas = document.createElement('canvas');
@@ -85,23 +107,35 @@ export default function App() {
     return simulated ? makePlaceholderPhoto(lines) : null;
   };
 
+  const takePhoto = () => {
+    const photo = capturePhoto();
+    if (!photo) { setMessage('No se pudo tomar la foto. Activa la cámara y concede el permiso en el navegador.'); return; }
+    setCapturedPhoto(photo);
+    setMessage('Evidencia fotográfica capturada.');
+  };
+
   const register = async () => {
     if (busy) return;
     setMessage('');
-    if (!employee) { setMessage('Introduce un NIP válido de 4 dígitos. Prueba 1234 en modo demo.'); return; }
+    if (!employee) { setMessage('Introduce un NIP válido de 4 dígitos. Verifica el NIP del empleado en administración.'); return; }
+    if (tipo === 'entrada' && !todaySchedule?.work && !dayOffReason.trim()) { setMessage('Indica el motivo por el que trabajarás en tu día libre.'); return; }
+    if (isLate && !lateReason) { setMessage('Selecciona un motivo de retraso antes de registrar la entrada.'); return; }
+    if (isLate && lateReason === 'Otro' && !lateOther.trim()) { setMessage('Explica el motivo en el campo Otro.'); return; }
+    if (locationStatus !== 'inside' || !locationInfo?.inside) { setMessage('Primero verifica que la ubicación esté dentro del área permitida.'); return; }
+    if (!capturedPhoto) { setMessage('Toma la fotografía de evidencia antes de registrar.'); return; }
     if (!simulated && cameraStatus !== 'ready') { setMessage('Activa la cámara antes de registrar.'); return; }
     setBusy(true);
     try {
-      const area = await checkLocation();
-      if (!area) return;
-      if (!area.inside) { setMessage('Estás fuera del área permitida. No se registró la asistencia.'); return; }
-      const photo = capturePhoto();
-      if (!photo) { setMessage('No se pudo tomar la foto. Comprueba los permisos de cámara.'); return; }
+      const area = locationInfo;
+      if (!area || !area.inside || locationStatus !== 'inside') { setMessage('Verifica la ubicación antes de registrar.'); return; }
+      const photo = capturedPhoto;
       const now = new Date();
       const record = {
         id: globalThis.crypto?.randomUUID?.() ?? String(now.getTime()),
-        tipo, employeeId: employee.id, name: employee.name, siteName: WORK_SITE.name,
-        inside: true, distance: area.distance, accuracy: area.accuracy, timestamp: now.toISOString(), photo
+        tipo, employeeId: employee.id, name: employee.name, siteName: fieldLocation ? 'Lugar no registrado' : workSite.name, siteId: fieldLocation ? '' : workSite.id,
+        lat: area.pos?.lat, lng: area.pos?.lng, inside: true, distance: area.distance, accuracy: area.accuracy, device: navigator.userAgent || 'Dispositivo no identificado', timestamp: now.toISOString(), photo,
+        late: isLate, lateReason: isLate ? lateReason : '', lateReasonDetail: isLate && lateReason === 'Otro' ? lateOther.trim() : '', medicalProof: medicalProof || null,
+        fieldLocation, dayOffWork: tipo === 'entrada' && !todaySchedule?.work, dayOffReason: tipo === 'entrada' && !todaySchedule?.work ? dayOffReason.trim() : ''
       };
       await submitAttendance(record);
       stopCamera();
@@ -110,30 +144,55 @@ export default function App() {
   };
 
   const closeResult = () => {
-    setResult(null); setPin(''); setLocationStatus('idle'); setLocationInfo(null);
+    setResult(null); setPin(''); setLocationStatus('idle'); setLocationInfo(null); setLateReason(''); setLateOther(''); setDayOffReason(''); setMedicalProof(null); setCapturedPhoto('');
     setTipo(current => current === 'entrada' ? 'salida' : 'entrada');
     setMessage('');
     if (!simulated) startCamera();
   };
 
-  return <div className="app-shell">
+  if (adminMode) return <div className="app-shell"><Admin onBack={() => { setAdminMode(false); setHomeScreen(true); }} /></div>;
+
+  if (homeScreen) return <div className="quia-home">
+    <div className="home-glow glow-left" aria-hidden="true"></div><div className="home-glow glow-right" aria-hidden="true"></div>
+    <div className="home-content">
+      <div className="quia-brand" aria-label="quia CHECK">
+        <svg className="quia-logo-symbol" viewBox="0 0 120 120" role="img" aria-label="Logo Quia"><circle cx="49" cy="49" r="36" fill="none" stroke="white" strokeWidth="15"/><path d="M75 75 L103 103" stroke="white" strokeWidth="15" strokeLinecap="round"/><circle cx="49" cy="49" r="9" fill="#FF6B4A"/></svg>
+        <div className="quia-wordmark"><span>quia</span><strong>CHECK</strong></div>
+      </div>
+      <p className="home-kicker">Registra tu asistencia</p>
+      <h1 className="home-title">¡Empecemos!</h1>
+      <nav className="home-actions" aria-label="Selecciona una sección">
+        <button className="home-admin" onClick={() => setAdminMode(true)}>Administración</button>
+        <button className="home-employee" onClick={() => { setHomeScreen(false); setAdminMode(false); }}>Empleado</button>
+      </nav>
+      <div className="home-check-illustration" aria-hidden="true">
+        <svg viewBox="0 0 300 300"><circle cx="132" cy="126" r="91" fill="none" stroke="white" strokeWidth="32"/><path d="M185 190 L256 261" stroke="#FF6B4A" strokeWidth="35" strokeLinecap="round"/><path d="M91 126 L120 155 L174 95" fill="none" stroke="#FF6B4A" strokeWidth="23" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </div>
+      <div className="home-footer"><span>Desarrollado por</span><span className="footer-mini-logo"><b>◉</b><strong>quia<small>DIGITAL</small></strong></span></div>
+    </div>
+  </div>;
+
+  return <div className="app-shell employee-app">
     <header className="app-header">
+      <button className="back-home-button" onClick={() => { setHomeScreen(true); stopCamera(); }}>← Inicio</button>
       <div className="brand-mark" aria-hidden="true">⌖</div>
       <h1>GeoCheck Checador</h1>
       <p>Registro de asistencia</p>
     </header>
     <main className="content">
+      <p className="required-legend"><span className="required-star">*</span> Información obligatoria</p>
       <div className="tabs">
-        {['entrada', 'salida'].map(value => <button key={value} className={tipo === value ? 'tab active' : 'tab'} onClick={() => setTipo(value)}>{value}</button>)}
+        {['entrada', 'salida'].map(value => <button key={value} className={tipo === value ? 'tab active' : 'tab'} onClick={() => { setTipo(value); setCapturedPhoto(''); setLocationStatus('idle'); setLocationInfo(null); setMessage(''); }}>{value}</button>)}
       </div>
       <section className="panel">
-        <h2>1. NIP del empleado</h2>
-        <input aria-label="NIP de cuatro dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={pin} onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setMessage(''); }} placeholder="Introduce 4 dígitos" />
-        <p className={employee ? 'hint success' : 'hint'}>{employee ? `Empleado: ${employee.name}` : 'NIP de demostración: 1234, 4821 o 7305'}</p>
+        <h2>1. NIP del empleado <span className="required-star" aria-label="obligatorio">*</span></h2>
+        <input aria-label="NIP de cuatro dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={pin} onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setSelectedSiteId(''); setMessage(''); setCapturedPhoto(''); }} placeholder="Introduce 4 dígitos" />
+        <p className={employee ? 'hint success' : 'hint'}>{employee ? `Empleado: ${employee.name}` : 'Introduce tu NIP de empleado activo'}</p>
       </section>
       <section className="panel">
-        <div className="panel-heading"><h2>2. Ubicación</h2><span className="pill">{WORK_SITE.name}</span></div>
-        <p className="hint">Radio permitido: {WORK_SITE.radiusM} m</p>
+        {canChooseSite && <label className="site-choice-label">Ubicación para esta entrada<select value={selectedSiteId || employee?.siteId || ''} onChange={e=>{setSelectedSiteId(e.target.value);setLocationStatus('idle');setLocationInfo(null);setCapturedPhoto('');setMessage('');}}><option value={employee?.siteId || ''}>Lugar asignado al empleado</option>{activeSites.filter(site=>site.id!==employee?.siteId).map(site=><option key={site.id} value={site.id}>{site.name}</option>)}{employee?.allowUnregisteredSite && <option value="__unregistered__">Lugar no registrado (trabajo de campo)</option>}</select><p className="hint">Puedes seleccionar otro lugar activo. Para «Lugar no registrado» se guardará la posición GPS actual sin comprobar un perímetro registrado.</p></label>}
+        <div className="panel-heading"><h2>2. Ubicación <span className="required-star" aria-label="obligatorio">*</span></h2><span className="pill">{fieldLocation ? "Lugar no registrado" : workSite.name}</span></div>
+        <p className="hint">{fieldLocation ? 'Lugar no registrado: se guardará la posición GPS actual.' : `Radio permitido: ${workSite.radiusM} m · Accuracy máximo: ${workSite.accuracyM ?? 100} m`}</p>
         <div className={`status-box ${locationStatus}`}>
           {locationStatus === 'checking' ? 'Consultando ubicación…' :
            locationStatus === 'inside' ? `Dentro del área · ${locationInfo?.distance} m · precisión ±${locationInfo?.accuracy} m` :
@@ -143,13 +202,17 @@ export default function App() {
         <button className="secondary-button" onClick={checkLocation} disabled={locationStatus === 'checking'}>Verificar ubicación</button>
       </section>
       <section className="panel">
-        <div className="panel-heading"><h2>3. Evidencia fotográfica</h2><span className={cameraStatus === 'ready' ? 'pill green' : 'pill'}>{simulated ? 'Modo de prueba' : cameraStatus === 'ready' ? 'Cámara activa' : cameraStatus === 'starting' ? 'Abriendo cámara…' : 'Cámara inactiva'}</span></div>
+        <div className="panel-heading"><h2>3. Evidencia fotográfica <span className="required-star" aria-label="obligatorio">*</span></h2><span className={cameraStatus === 'ready' ? 'pill green' : 'pill'}>{simulated ? 'Modo de prueba' : cameraStatus === 'ready' ? 'Cámara activa' : cameraStatus === 'starting' ? 'Abriendo cámara…' : 'Cámara inactiva'}</span></div>
         <div className="camera-frame">
           <video ref={videoRef} autoPlay muted playsInline className={cameraStatus === 'ready' ? 'camera-video' : 'camera-video hidden'} />
           {cameraStatus !== 'ready' && <div className="camera-placeholder"><span>◎</span><p>{simulated ? 'Se usará una imagen de prueba' : cameraError || 'La vista previa aparecerá aquí'}</p></div>}
         </div>
         {cameraStatus !== 'ready' && <button className="secondary-button" onClick={startCamera}>Activar cámara</button>}
+        {cameraStatus === 'ready' && <button className="secondary-button" onClick={takePhoto}>Tomar foto de evidencia</button>}
+        {capturedPhoto && <div className="captured-evidence"><img src={capturedPhoto} alt="Fotografía de evidencia capturada" /><p>✓ Fotografía capturada</p><button type="button" className="secondary-button" onClick={takePhoto}>Tomar otra foto</button></div>}
       </section>
+      {tipo === 'entrada' && employee && !todaySchedule?.work && <section className="panel late-reason-panel"><h2>Entrada en día libre</h2><p className="message" role="status">Aviso: hoy no está dentro de tu horario habitual. Puedes registrar la entrada, pero debes indicar el motivo por el que trabajarás en tu día libre.</p><label>Motivo obligatorio<textarea value={dayOffReason} onChange={e=>setDayOffReason(e.target.value)} required maxLength={500} placeholder="Ej. turno extra autorizado, cobertura de un compañero…" /></label></section>}
+      {isLate && <section className="panel late-reason-panel"><h2>4. Motivo de retraso <span className="required-star" aria-label="obligatorio">*</span></h2><p className="hint">El horario indica que tu entrada está fuera de la tolerancia permitida. Selecciona un motivo para continuar.</p><label>Motivo<select value={lateReason} onChange={e => setLateReason(e.target.value)} required><option value="">Selecciona un motivo</option>{lateReasons.filter(r => r.active !== false).map(r => <option key={r.id || r.label} value={r.label}>{r.label}</option>)}</select></label>{lateReason === 'Otro' && <label>Justificación obligatoria<textarea value={lateOther} onChange={e => setLateOther(e.target.value)} required maxLength={500} placeholder="Explica el motivo del retraso" /></label>}{lateReason === 'Cita médica' && <label>Comprobante médico (opcional, puedes adjuntarlo después)<input type="file" accept="image/*,.pdf" onChange={e => {const file=e.target.files?.[0]; if(!file)return; if(file.size>5*1024*1024){setMessage('El archivo debe pesar 5 MB o menos.');return;} const reader=new FileReader();reader.onload=()=>setMedicalProof({name:file.name,type:file.type,data:reader.result});reader.readAsDataURL(file);}}/><small>Foto o PDF de hasta 5 MB. No es obligatorio adjuntarlo ahora.</small></label>}</section>}
       {SHOW_DEMO_PANEL && <details className="panel demo-panel">
         <summary>Modo de pruebas</summary>
         <p className="hint">Permite probar el flujo sin estar físicamente en el centro. No uses las simulaciones para asistencia real.</p>
@@ -158,7 +221,8 @@ export default function App() {
         </div>
       </details>}
       {message && <p className="message" role="alert">{message}</p>}
-      <button className="primary-button" onClick={register} disabled={busy || pin.length !== 4 || (!simulated && cameraStatus !== 'ready')}>
+      <div className="required-checklist" aria-live="polite"><strong>Requisitos para registrar</strong><span className={tipo !== "entrada" || todaySchedule?.work ? "check-ok" : "check-pending"}>{tipo !== "entrada" || todaySchedule?.work || dayOffReason.trim() ? "✓" : "×"} {tipo === 'entrada' && !todaySchedule?.work ? 'Motivo de trabajo en día libre' : 'Horario laboral de hoy'}</span><span className={employee ? 'check-ok' : 'check-pending'}>{employee ? '✓' : '×'} Empleado válido</span><span className={locationStatus === 'inside' && locationInfo?.inside ? 'check-ok' : 'check-pending'}>{locationStatus === 'inside' && locationInfo?.inside ? '✓' : '×'} Ubicación dentro del área</span><span className={capturedPhoto ? 'check-ok' : 'check-pending'}>{capturedPhoto ? '✓' : '×'} Foto capturada</span>{isLate && <span className={lateReason && (lateReason !== 'Otro' || lateOther.trim()) ? 'check-ok' : 'check-pending'}>{lateReason && (lateReason !== 'Otro' || lateOther.trim()) ? '✓' : '×'} Motivo del retraso</span>}<p className="checklist-help">Completa los requisitos marcados con ×. Si el horario de hoy aparece pendiente, revisa los días y horas asignados al empleado en Administración.</p></div>
+      <button className="primary-button" onClick={register} disabled={busy || !employee || pin.length !== 4 || locationStatus !== 'inside' || !locationInfo?.inside || !capturedPhoto || (!simulated && cameraStatus !== 'ready') || (tipo === 'entrada' && !todaySchedule?.work && !dayOffReason.trim()) || (isLate && (!lateReason || (lateReason === 'Otro' && !lateOther.trim())))}>
         {busy ? 'Registrando…' : `Registrar ${tipo}`}
       </button>
       <p className="footnote">La versión de demostración guarda los metadatos localmente en este navegador.</p>
@@ -167,7 +231,7 @@ export default function App() {
       <div className="result-card">
         <div className="result-icon">✓</div><h2 id="result-title">¡Registro completado!</h2>
         <p><strong>{result.name}</strong></p><p>{result.tipo === 'entrada' ? 'Entrada' : 'Salida'} · {new Date(result.timestamp).toLocaleString('es-VE')}</p>
-        <p className="hint">{result.siteName} · {result.distance} m del centro</p>
+        <p className="hint">{result.siteName} · {result.fieldLocation ? 'GPS de campo' : `${result.distance} m del centro`}</p>{result.late && <p className="hint">Retraso: {result.lateReason}{result.lateReasonDetail ? ' — ' + result.lateReasonDetail : ''}</p>}{result.dayOffWork && <p className="hint"><strong>Entrada en día libre.</strong> Motivo: {result.dayOffReason}</p>}
         <button className="primary-button" onClick={closeResult}>Continuar</button>
       </div>
     </div>}

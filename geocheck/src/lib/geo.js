@@ -10,12 +10,12 @@ export function distanceMeters(a, b) {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
 }
 
-export function getOneShotPosition() {
+export function getOneShotPosition(maxAccuracy = MAX_ACCURACY_M) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error('Este dispositivo no admite geolocalización.'));
     navigator.geolocation.getCurrentPosition(position => {
       const accuracy = Math.round(position.coords.accuracy);
-      if (accuracy > MAX_ACCURACY_M) return reject(new Error(`Precisión GPS insuficiente (±${accuracy} m). Inténtalo en un espacio abierto.`));
+      if (accuracy > maxAccuracy) return reject(new Error(`Precisión GPS insuficiente (±${accuracy} m). Inténtalo en un espacio abierto.`));
       resolve({ lat: position.coords.latitude, lng: position.coords.longitude, accuracy });
     }, error => {
       const messages = { 1: 'Permiso de ubicación denegado. Actívalo en los ajustes del navegador.', 2: 'No se pudo determinar tu ubicación.', 3: 'Se agotó el tiempo esperando al GPS.' };
@@ -27,10 +27,10 @@ export function getOneShotPosition() {
 export async function getPosition(mode, site) {
   if (mode === 'inside') return { lat: site.lat + 0.0003, lng: site.lng + 0.0002, accuracy: 8 };
   if (mode === 'outside') return { lat: site.lat + 0.0062, lng: site.lng - 0.004, accuracy: 8 };
-  return getOneShotPosition();
+  return getOneShotPosition(site?.accuracyM ?? MAX_ACCURACY_M);
 }
 
 export function evaluateArea(position, site) {
   const distance = Math.round(distanceMeters(position, site));
-  return { pos: position, distance, accuracy: position.accuracy, inside: distance <= site.radiusM };
+  return { pos: position, distance, accuracy: position.accuracy, inside: distance <= site.radiusM && position.accuracy <= (site.accuracyM ?? MAX_ACCURACY_M) };
 }
