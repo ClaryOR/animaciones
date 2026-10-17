@@ -23,6 +23,7 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [lateReason, setLateReason] = useState('');
   const [lateOther, setLateOther] = useState('');
+  const [dayOffReason, setDayOffReason] = useState('');
   const [medicalProof, setMedicalProof] = useState(null);
   const [capturedPhoto, setCapturedPhoto] = useState('');
   const simulated = mode !== 'real';
@@ -113,7 +114,7 @@ export default function App() {
     if (busy) return;
     setMessage('');
     if (!employee) { setMessage('Introduce un NIP válido de 4 dígitos. Verifica el NIP del empleado en administración.'); return; }
-    if (tipo === 'entrada' && !todaySchedule?.work) { setMessage('Hoy figura como día libre en el horario del empleado. Contacta con administración si esto es incorrecto.'); return; }
+    if (tipo === 'entrada' && !todaySchedule?.work && !dayOffReason.trim()) { setMessage('Indica el motivo por el que trabajarás en tu día libre.'); return; }
     if (isLate && !lateReason) { setMessage('Selecciona un motivo de retraso antes de registrar la entrada.'); return; }
     if (isLate && lateReason === 'Otro' && !lateOther.trim()) { setMessage('Explica el motivo en el campo Otro.'); return; }
     if (locationStatus !== 'inside' || !locationInfo?.inside) { setMessage('Primero verifica que la ubicación esté dentro del área permitida.'); return; }
@@ -129,7 +130,8 @@ export default function App() {
         id: globalThis.crypto?.randomUUID?.() ?? String(now.getTime()),
         tipo, employeeId: employee.id, name: employee.name, siteName: workSite.name, siteId: workSite.id,
         inside: true, distance: area.distance, accuracy: area.accuracy, device: navigator.userAgent || 'Dispositivo no identificado', timestamp: now.toISOString(), photo,
-        late: isLate, lateReason: isLate ? lateReason : '', lateReasonDetail: isLate && lateReason === 'Otro' ? lateOther.trim() : '', medicalProof: medicalProof || null
+        late: isLate, lateReason: isLate ? lateReason : '', lateReasonDetail: isLate && lateReason === 'Otro' ? lateOther.trim() : '', medicalProof: medicalProof || null,
+        dayOffWork: tipo === 'entrada' && !todaySchedule?.work, dayOffReason: tipo === 'entrada' && !todaySchedule?.work ? dayOffReason.trim() : ''
       };
       await submitAttendance(record);
       stopCamera();
@@ -138,7 +140,7 @@ export default function App() {
   };
 
   const closeResult = () => {
-    setResult(null); setPin(''); setLocationStatus('idle'); setLocationInfo(null); setLateReason(''); setLateOther(''); setMedicalProof(null); setCapturedPhoto('');
+    setResult(null); setPin(''); setLocationStatus('idle'); setLocationInfo(null); setLateReason(''); setLateOther(''); setDayOffReason(''); setMedicalProof(null); setCapturedPhoto('');
     setTipo(current => current === 'entrada' ? 'salida' : 'entrada');
     setMessage('');
     if (!simulated) startCamera();
@@ -204,6 +206,7 @@ export default function App() {
         {cameraStatus === 'ready' && <button className="secondary-button" onClick={takePhoto}>Tomar foto de evidencia</button>}
         {capturedPhoto && <div className="captured-evidence"><img src={capturedPhoto} alt="Fotografía de evidencia capturada" /><p>✓ Fotografía capturada</p><button type="button" className="secondary-button" onClick={takePhoto}>Tomar otra foto</button></div>}
       </section>
+      {tipo === 'entrada' && employee && !todaySchedule?.work && <section className="panel late-reason-panel"><h2>Entrada en día libre</h2><p className="message" role="status">Aviso: hoy no está dentro de tu horario habitual. Puedes registrar la entrada, pero debes indicar el motivo por el que trabajarás en tu día libre.</p><label>Motivo obligatorio<textarea value={dayOffReason} onChange={e=>setDayOffReason(e.target.value)} required maxLength={500} placeholder="Ej. turno extra autorizado, cobertura de un compañero…" /></label></section>}
       {isLate && <section className="panel late-reason-panel"><h2>4. Motivo de retraso <span className="required-star" aria-label="obligatorio">*</span></h2><p className="hint">El horario indica que tu entrada está fuera de la tolerancia permitida. Selecciona un motivo para continuar.</p><label>Motivo<select value={lateReason} onChange={e => setLateReason(e.target.value)} required><option value="">Selecciona un motivo</option>{lateReasons.filter(r => r.active !== false).map(r => <option key={r.id || r.label} value={r.label}>{r.label}</option>)}</select></label>{lateReason === 'Otro' && <label>Justificación obligatoria<textarea value={lateOther} onChange={e => setLateOther(e.target.value)} required maxLength={500} placeholder="Explica el motivo del retraso" /></label>}{lateReason === 'Cita médica' && <label>Comprobante médico (opcional, puedes adjuntarlo después)<input type="file" accept="image/*,.pdf" onChange={e => {const file=e.target.files?.[0]; if(!file)return; if(file.size>5*1024*1024){setMessage('El archivo debe pesar 5 MB o menos.');return;} const reader=new FileReader();reader.onload=()=>setMedicalProof({name:file.name,type:file.type,data:reader.result});reader.readAsDataURL(file);}}/><small>Foto o PDF de hasta 5 MB. No es obligatorio adjuntarlo ahora.</small></label>}</section>}
       {SHOW_DEMO_PANEL && <details className="panel demo-panel">
         <summary>Modo de pruebas</summary>
@@ -213,8 +216,8 @@ export default function App() {
         </div>
       </details>}
       {message && <p className="message" role="alert">{message}</p>}
-      <div className="required-checklist" aria-live="polite"><strong>Requisitos para registrar</strong><span className={tipo !== "entrada" || todaySchedule?.work ? "check-ok" : "check-pending"}>{tipo !== "entrada" || todaySchedule?.work ? "✓" : "×"} Horario laboral de hoy</span><span className={employee ? 'check-ok' : 'check-pending'}>{employee ? '✓' : '×'} Empleado válido</span><span className={locationStatus === 'inside' && locationInfo?.inside ? 'check-ok' : 'check-pending'}>{locationStatus === 'inside' && locationInfo?.inside ? '✓' : '×'} Ubicación dentro del área</span><span className={capturedPhoto ? 'check-ok' : 'check-pending'}>{capturedPhoto ? '✓' : '×'} Foto capturada</span>{isLate && <span className={lateReason && (lateReason !== 'Otro' || lateOther.trim()) ? 'check-ok' : 'check-pending'}>{lateReason && (lateReason !== 'Otro' || lateOther.trim()) ? '✓' : '×'} Motivo del retraso</span>}<p className="checklist-help">Completa los requisitos marcados con ×. Si el horario de hoy aparece pendiente, revisa los días y horas asignados al empleado en Administración.</p></div>
-      <button className="primary-button" onClick={register} disabled={busy || !employee || pin.length !== 4 || locationStatus !== 'inside' || !locationInfo?.inside || !capturedPhoto || (!simulated && cameraStatus !== 'ready') || (isLate && (!lateReason || (lateReason === 'Otro' && !lateOther.trim())))}>
+      <div className="required-checklist" aria-live="polite"><strong>Requisitos para registrar</strong><span className={tipo !== "entrada" || todaySchedule?.work ? "check-ok" : "check-pending"}>{tipo !== "entrada" || todaySchedule?.work || dayOffReason.trim() ? "✓" : "×"} {tipo === 'entrada' && !todaySchedule?.work ? 'Motivo de trabajo en día libre' : 'Horario laboral de hoy'}</span><span className={employee ? 'check-ok' : 'check-pending'}>{employee ? '✓' : '×'} Empleado válido</span><span className={locationStatus === 'inside' && locationInfo?.inside ? 'check-ok' : 'check-pending'}>{locationStatus === 'inside' && locationInfo?.inside ? '✓' : '×'} Ubicación dentro del área</span><span className={capturedPhoto ? 'check-ok' : 'check-pending'}>{capturedPhoto ? '✓' : '×'} Foto capturada</span>{isLate && <span className={lateReason && (lateReason !== 'Otro' || lateOther.trim()) ? 'check-ok' : 'check-pending'}>{lateReason && (lateReason !== 'Otro' || lateOther.trim()) ? '✓' : '×'} Motivo del retraso</span>}<p className="checklist-help">Completa los requisitos marcados con ×. Si el horario de hoy aparece pendiente, revisa los días y horas asignados al empleado en Administración.</p></div>
+      <button className="primary-button" onClick={register} disabled={busy || !employee || pin.length !== 4 || locationStatus !== 'inside' || !locationInfo?.inside || !capturedPhoto || (!simulated && cameraStatus !== 'ready') || (tipo === 'entrada' && !todaySchedule?.work && !dayOffReason.trim()) || (isLate && (!lateReason || (lateReason === 'Otro' && !lateOther.trim())))}>
         {busy ? 'Registrando…' : `Registrar ${tipo}`}
       </button>
       <p className="footnote">La versión de demostración guarda los metadatos localmente en este navegador.</p>
@@ -223,7 +226,7 @@ export default function App() {
       <div className="result-card">
         <div className="result-icon">✓</div><h2 id="result-title">¡Registro completado!</h2>
         <p><strong>{result.name}</strong></p><p>{result.tipo === 'entrada' ? 'Entrada' : 'Salida'} · {new Date(result.timestamp).toLocaleString('es-VE')}</p>
-        <p className="hint">{result.siteName} · {result.distance} m del centro</p>{result.late && <p className="hint">Retraso: {result.lateReason}{result.lateReasonDetail ? ' — ' + result.lateReasonDetail : ''}</p>}
+        <p className="hint">{result.siteName} · {result.distance} m del centro</p>{result.late && <p className="hint">Retraso: {result.lateReason}{result.lateReasonDetail ? ' — ' + result.lateReasonDetail : ''}</p>}{result.dayOffWork && <p className="hint"><strong>Entrada en día libre.</strong> Motivo: {result.dayOffReason}</p>}
         <button className="primary-button" onClick={closeResult}>Continuar</button>
       </div>
     </div>}
