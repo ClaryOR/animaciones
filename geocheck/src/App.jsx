@@ -64,7 +64,11 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => { startCamera(); return () => streamRef.current?.getTracks().forEach(track => track.stop()); }, [startCamera]);
+  useEffect(() => {
+    if (homeScreen || adminMode) { stopCamera(); return undefined; }
+    startCamera();
+    return () => streamRef.current?.getTracks().forEach(track => track.stop());
+  }, [startCamera, stopCamera, homeScreen, adminMode]);
   useEffect(() => { setLocationStatus('idle'); setLocationInfo(null); }, [mode]);
 
   const checkLocation = useCallback(async () => {
