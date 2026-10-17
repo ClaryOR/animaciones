@@ -100,6 +100,9 @@ export default function Admin({ onBack }) {
   const [siteForm, setSiteForm] = useState({ id: '', name: '', lat: '', lng: '', radiusM: 150, accuracyM: 100, active: true });
   const [employeeFilter, setEmployeeFilter] = useState('');
   const [siteFilter, setSiteFilter] = useState('');
+  const [appliedFilters, setAppliedFilters] = useState({from:'',to:'',employeeFilter:'',siteFilter:''});
+  const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const [selectedSites, setSelectedSites] = useState([]);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [exportFormat, setExportFormat] = useState('xlsx');
@@ -111,13 +114,13 @@ export default function Admin({ onBack }) {
   const persistSites = value => { setSites(value); save(SITE_KEY, value); };
   const filtered = useMemo(() => records.filter(r => {
     const date = dateKey(r.timestamp);
-    return (!from || date >= from) && (!to || date <= to) && (!employeeFilter || r.employeeId === employeeFilter) && (!siteFilter || (r.siteId || '') === siteFilter);
-  }), [records, from, to, employeeFilter, siteFilter]);
+    return (!appliedFilters.from || date >= appliedFilters.from) && (!appliedFilters.to || date <= appliedFilters.to) && (!appliedFilters.employeeFilter || r.employeeId === appliedFilters.employeeFilter) && (!appliedFilters.siteFilter || (r.siteId || '') === appliedFilters.siteFilter);
+  }), [records, appliedFilters]);
   const reportRows = useMemo(() => {
     const rows = recordRows(filtered, employees, sites);
     const today = dateKey(new Date());
-    const startDate = from || to || today;
-    const requestedEndDate = to || from || today;
+    const startDate = appliedFilters.from || appliedFilters.to || today;
+    const requestedEndDate = appliedFilters.to || appliedFilters.from || today;
     const endDate = requestedEndDate > today ? today : requestedEndDate;
     const start = new Date(startDate + 'T12:00:00');
     const end = new Date(endDate + 'T12:00:00');
@@ -129,7 +132,7 @@ export default function Admin({ onBack }) {
       date.setDate(start.getDate() + offset);
       const dayKey = dateKey(date);
       const weekday = ['sun','mon','tue','wed','thu','fri','sat'][date.getDay()];
-      employees.filter(e => e.status === 'Activo' && e.active !== false).forEach(e => {
+      employees.filter(e => e.status === 'Activo' && e.active !== false && (!appliedFilters.employeeFilter || e.id === appliedFilters.employeeFilter) && (!appliedFilters.siteFilter || e.siteId === appliedFilters.siteFilter)).forEach(e => {
         const schedule = e.schedule?.[weekday];
         if (!schedule?.work || attended.has(e.id + '|' + dayKey)) return;
         absences.push({
@@ -144,8 +147,10 @@ export default function Admin({ onBack }) {
         });
       });
     }
-    return [...rows, ...absences].sort((a,b) => String(a.Fecha).localeCompare(String(b.Fecha)) || String(a.Empleado).localeCompare(String(b.Empleado)));
-  }, [filtered, employees, sites, from, to]);
+    const dayOffRows = rows.filter(row => filtered.some(record => record.employeeId === row['ID empleado'] && dateKey(record.timestamp) === row.Fecha && record.dayOffWork)).map(row => ({...row, 'Estado entrada':'Entrada en día libre', 'Motivo / comprobante': filtered.find(record => record.employeeId === row['ID empleado'] && dateKey(record.timestamp) === row.Fecha && record.dayOffWork)?.dayOffReason || ''}));
+    const enrichedRows = rows.map(row => dayOffRows.find(dayOff => dayOff.Fecha === row.Fecha && dayOff['ID empleado'] === row['ID empleado']) || row);
+    return [...enrichedRows, ...absences].sort((a,b) => String(a.Fecha).localeCompare(String(b.Fecha)) || String(a.Empleado).localeCompare(String(b.Empleado)));
+  }, [filtered, employees, sites, appliedFilters]);
 
   function handleAuth(event) {
     event.preventDefault(); setAuthError('');
@@ -281,6 +286,28 @@ export default function Admin({ onBack }) {
     setNotice(`Carga completada: se agregaron ${next.length - employees.length} empleados. Los datos quedaron guardados en este navegador.`);
   }
 
+  function deleteSelectedEmployees() {
+    if (!selectedEmployees.length) { setNotice('Selecciona al menos un empleado.'); return; }
+    const names = employees.filter(e => selectedEmployees.includes(e.id)).map(e => e.name);
+    if (!window.confirm(`¿Eliminar ${names.length} empleado(s) seleccionado(s)? Sus registros históricos se conservarán.`)) return;
+    persistEmployees(employees.filter(e => !selectedEmployees.includes(e.id)));
+    setSelectedEmployees([]);
+    setNotice(`Se eliminaron ${names.length} empleado(s). Los registros históricos se conservaron.`);
+  }
+  function deleteSite(site) {
+    if (!window.confirm(`¿Eliminar el lugar «${site.name}»? Los empleados asignados y los registros históricos conservarán sus datos, pero ya no podrán seleccionarlo como lugar activo.`)) return;
+    persistSites(sites.filter(s => s.id !== site.id));
+    setSelectedSites(items => items.filter(id => id !== site.id));
+    setNotice(`Se eliminó el lugar «${site.name}».`);
+  }
+  function deleteSelectedSites() {
+    if (!selectedSites.length) { setNotice('Selecciona al menos un lugar.'); return; }
+    if (!window.confirm(`¿Eliminar ${selectedSites.length} lugar(es) seleccionado(s)?`)) return;
+    persistSites(sites.filter(s => !selectedSites.includes(s.id)));
+    setSelectedSites([]);
+    setNotice(`Se eliminaron ${selectedSites.length} lugar(es).`);
+  }
+
   function deleteEmployee(employee) {
     const confirmed = window.confirm(`¿Eliminar a ${employee.name} del directorio? Esta acción no se puede deshacer. Los registros de asistencia anteriores se conservarán.`);
     if (!confirmed) return;
@@ -390,7 +417,7 @@ export default function Admin({ onBack }) {
         {[['late','Retraso permitido al entrar'],['earlyIn','Anticipación permitida al entrar'],['earlyOut','Anticipación permitida al salir'],['lateOut','Retraso permitido al salir']].map(([key,label]) => <label key={key} style={labelStyle}>{label}<input style={fieldStyle} type="number" min="0" max="240" value={employeeForm.tolerances?.[key] ?? 0} onChange={e => setEmployeeForm(f => ({ ...f, tolerances: { ...f.tolerances, [key]: Number(e.target.value) } }))} required /></label>)}
         <div className="admin-actions"><button style={primary} type="submit">Guardar empleado</button><button style={buttonStyle} type="button" onClick={() => setEmployeeForm({ ...emptyEmployee(), siteId: sites[0]?.id || '' })}>Limpiar</button></div>
       </form>
-      <section className="admin-card"><h2>Directorio ({employees.length})</h2>{employees.length === 0 && <p>No hay empleados registrados.</p>}<div className="admin-list">{employees.map(e => <article className="admin-list-item" key={e.id}><div><strong>{e.name}</strong><p>{e.id} · NIP {e.pin} · {sites.find(s => s.id === e.siteId)?.name || 'Sin lugar'}</p><p>{e.role || 'Sin cargo'} · {e.department || 'Sin departamento'}</p><span className={e.status === 'Activo' ? 'admin-status' : 'admin-status inactive'}>{e.status}</span></div><div className="admin-actions"><button type="button" style={buttonStyle} onClick={() => setEmployeeForm(normalizeEmployee(e))}>Editar</button><button type="button" style={{...buttonStyle, color:'#B42318', borderColor:'#F3B5AE'}} onClick={() => deleteEmployee(e)}>Eliminar</button></div></article>)}</div><p className="admin-warning">Demo local: NIP y datos se guardan en este navegador. No uses datos sensibles reales hasta configurar un servidor seguro.</p></section>
+      <section className="admin-card"><h2>Directorio ({employees.length})</h2><div className="admin-actions"><button type="button" style={buttonStyle} onClick={()=>setSelectedEmployees(selectedEmployees.length===employees.length?[]:employees.map(e=>e.id))}>{selectedEmployees.length===employees.length?'Deseleccionar todos':'Seleccionar todos'}</button><button type="button" style={{...buttonStyle,color:'#B42318',borderColor:'#F3B5AE'}} onClick={deleteSelectedEmployees}>Eliminar seleccionados ({selectedEmployees.length})</button></div>{employees.length === 0 && <p>No hay empleados registrados.</p>}<div className="admin-list">{employees.map(e => <article className="admin-list-item" key={e.id}><label><input type="checkbox" checked={selectedEmployees.includes(e.id)} onChange={ev=>setSelectedEmployees(items=>ev.target.checked?[...items,e.id]:items.filter(id=>id!==e.id))} aria-label={`Seleccionar ${e.name}`} /></label><div><strong>{e.name}</strong><p>{e.id} · NIP {e.pin} · {sites.find(s => s.id === e.siteId)?.name || 'Sin lugar'}</p><p>{e.role || 'Sin cargo'} · {e.department || 'Sin departamento'}</p><span className={e.status === 'Activo' ? 'admin-status' : 'admin-status inactive'}>{e.status}</span></div><div className="admin-actions"><button type="button" style={buttonStyle} onClick={() => setEmployeeForm(normalizeEmployee(e))}>Editar</button><button type="button" style={{...buttonStyle, color:'#B42318', borderColor:'#F3B5AE'}} onClick={() => deleteEmployee(e)}>Eliminar</button></div></article>)}</div><p className="admin-warning">Demo local: NIP y datos se guardan en este navegador. No uses datos sensibles reales hasta configurar un servidor seguro.</p></section>
     </section></>}
     {section === 'sites' && <section className="admin-grid">
       <form className="admin-card" onSubmit={saveSite}><h2>{siteForm.id ? 'Editar lugar' : 'Agregar lugar'}</h2>
@@ -403,10 +430,10 @@ export default function Admin({ onBack }) {
         <div className="admin-actions"><button style={primary} type="submit">Guardar lugar</button><button style={buttonStyle} type="button" onClick={() => setSiteForm({ id:'', name:'', lat:'', lng:'', radiusM:150, accuracyM:100, active:true })}>Limpiar</button></div>
         <p className="admin-warning">Accuracy establece la precisión GPS máxima aceptada para este lugar. Reemplaza las coordenadas de ejemplo por las reales.</p>
       </form>
-      <section className="admin-card"><h2>Lugares registrados ({sites.length})</h2><div className="admin-list">{sites.map(s => <article className="admin-list-item" key={s.id}><div><strong>{s.name}</strong><p>{s.lat}, {s.lng} · Radio {s.radiusM} m · Accuracy ±{s.accuracyM ?? 100} m</p><span className={s.active === false ? 'admin-status inactive' : 'admin-status'}>{s.active === false ? 'Inactivo' : 'Activo'}</span></div><button style={buttonStyle} onClick={() => setSiteForm({ ...s, lat: String(s.lat), lng: String(s.lng), radiusM: String(s.radiusM), accuracyM: String(s.accuracyM ?? 100) })}>Editar</button></article>)}</div></section>
+      <section className="admin-card"><h2>Lugares registrados ({sites.length})</h2><div className="admin-actions"><button type="button" style={buttonStyle} onClick={()=>setSelectedSites(selectedSites.length===sites.length?[]:sites.map(s=>s.id))}>{selectedSites.length===sites.length?'Deseleccionar todos':'Seleccionar todos'}</button><button type="button" style={{...buttonStyle,color:'#B42318',borderColor:'#F3B5AE'}} onClick={deleteSelectedSites}>Eliminar seleccionados ({selectedSites.length})</button></div><div className="admin-list">{sites.map(s => <article className="admin-list-item" key={s.id}><label><input type="checkbox" checked={selectedSites.includes(s.id)} onChange={ev=>setSelectedSites(items=>ev.target.checked?[...items,s.id]:items.filter(id=>id!==s.id))} aria-label={`Seleccionar ${s.name}`} /></label><div><strong>{s.name}</strong><p>{s.lat}, {s.lng} · Radio {s.radiusM} m · Accuracy ±{s.accuracyM ?? 100} m</p><span className={s.active === false ? 'admin-status inactive' : 'admin-status'}>{s.active === false ? 'Inactivo' : 'Activo'}</span></div><div className="admin-actions"><button style={buttonStyle} onClick={() => setSiteForm({ ...s, lat: String(s.lat), lng: String(s.lng), radiusM: String(s.radiusM), accuracyM: String(s.accuracyM ?? 100) })}>Editar</button><button type="button" style={{...buttonStyle,color:'#B42318',borderColor:'#F3B5AE'}} onClick={()=>deleteSite(s)}>Eliminar</button></div></article>)}</div></section>
     </section>}
-    {section === 'reasons' && <section className="admin-card"><h2>Motivos de retraso</h2><p>Estas opciones aparecerán al empleado cuando el sistema detecte una entrada tardía. La opción Otro exige una explicación.</p><form onSubmit={addReason} className="admin-actions"><input style={{...fieldStyle,maxWidth:360}} value={reasonDraft} onChange={e=>setReasonDraft(e.target.value)} placeholder="Nuevo motivo" required maxLength={80}/><button style={primary} type="submit">Agregar motivo</button></form><div className="admin-list">{reasons.map(reason=><article className="admin-list-item" key={reason.id}><div><strong>{reason.label}</strong><p>{reason.active===false?'Desactivado':'Disponible para empleados'}</p></div><div className="admin-actions">{reason.label!=='Otro' && <button style={buttonStyle} onClick={()=>{const nextLabel=window.prompt('Editar motivo',reason.label); if(nextLabel?.trim()) persistReasons(reasons.map(r=>r.id===reason.id?{...r,label:nextLabel.trim()}:r));}}>Editar</button>}<button style={buttonStyle} onClick={()=>persistReasons(reasons.map(r=>r.id===reason.id?{...r,active:r.active===false}:r))}>{reason.active===false?'Activar':'Desactivar'}</button></div></article>)}</div><p className="admin-warning">Los cambios se guardan en este navegador. La opción Otro se mantiene como opción especial para exigir explicación.</p></section>}\n    {section === 'reports' && <section className="admin-card"><div className="admin-report-heading"><div><h2>Historial de asistencia</h2><p>{reportRows.length} fila(s) de asistencia y ausencias con los filtros seleccionados.</p></div><div className="admin-actions"><button style={buttonStyle} onClick={refreshRecords}>Actualizar</button></div></div>
-      <div className="admin-filters"><label style={labelStyle}>Desde<input style={fieldStyle} type="date" value={from} onChange={e => setFrom(e.target.value)} /></label><label style={labelStyle}>Hasta<input style={fieldStyle} type="date" value={to} onChange={e => setTo(e.target.value)} /></label><label style={labelStyle}>Empleado<select style={fieldStyle} value={employeeFilter} onChange={e => setEmployeeFilter(e.target.value)}><option value="">Todos</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label><label style={labelStyle}>Lugar<select style={fieldStyle} value={siteFilter} onChange={e => setSiteFilter(e.target.value)}><option value="">Todos</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label></div>
+    {section === 'reasons' && <section className="admin-card"><h2>Motivos de retraso</h2><p>Estas opciones aparecerán al empleado cuando el sistema detecte una entrada tardía. La opción Otro exige una explicación.</p><form onSubmit={addReason} className="admin-actions"><input style={{...fieldStyle,maxWidth:360}} value={reasonDraft} onChange={e=>setReasonDraft(e.target.value)} placeholder="Nuevo motivo" required maxLength={80}/><button style={primary} type="submit">Agregar motivo</button></form><div className="admin-list">{reasons.map(reason=><article className="admin-list-item" key={reason.id}><div><strong>{reason.label}</strong><p>{reason.active===false?'Desactivado':'Disponible para empleados'}</p></div><div className="admin-actions">{reason.label!=='Otro' && <button style={buttonStyle} onClick={()=>{const nextLabel=window.prompt('Editar motivo',reason.label); if(nextLabel?.trim()) persistReasons(reasons.map(r=>r.id===reason.id?{...r,label:nextLabel.trim()}:r));}}>Editar</button>}<button style={buttonStyle} onClick={()=>persistReasons(reasons.map(r=>r.id===reason.id?{...r,active:r.active===false}:r))}>{reason.active===false?'Activar':'Desactivar'}</button></div></article>)}</div><p className="admin-warning">Los cambios se guardan en este navegador. La opción Otro se mantiene como opción especial para exigir explicación.</p></section>}\n    {section === 'reports' && <section className="admin-card"><div className="admin-report-heading"><div><h2>Historial de asistencia</h2><p>{reportRows.length} fila(s) de asistencia y ausencias con los filtros seleccionados.</p></div><div className="admin-actions"><button style={buttonStyle} onClick={refreshRecords}>Actualizar datos</button></div></div>
+      <div className="admin-filters"><label style={labelStyle}>Desde<input style={fieldStyle} type="date" value={from} onChange={e => setFrom(e.target.value)} /></label><label style={labelStyle}>Hasta<input style={fieldStyle} type="date" value={to} onChange={e => setTo(e.target.value)} /></label><label style={labelStyle}>Empleado<select style={fieldStyle} value={employeeFilter} onChange={e => setEmployeeFilter(e.target.value)}><option value="">Todos</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label><label style={labelStyle}>Lugar<select style={fieldStyle} value={siteFilter} onChange={e => setSiteFilter(e.target.value)}><option value="">Todos</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label></div><div className="admin-actions"><button type="button" style={primary} onClick={()=>{setAppliedFilters({from,to,employeeFilter,siteFilter});setNotice('Filtros aplicados.');}}>Buscar</button><button type="button" style={buttonStyle} onClick={()=>{setFrom('');setTo('');setEmployeeFilter('');setSiteFilter('');setAppliedFilters({from:'',to:'',employeeFilter:'',siteFilter:''});setNotice('Filtros limpiados.');}}>Limpiar</button></div>
       <label style={labelStyle}>Formato de exportación<select style={fieldStyle} value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV</option><option value="pdf">PDF</option></select></label>
       <button style={primary} onClick={exportReport}>Exportar reporte</button>
       <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Fecha</th><th>Empleado</th><th>Entrada prevista/real</th><th>Estado entrada</th><th>Salida prevista/real</th><th>Estado salida</th><th>Dispositivo</th><th>Motivo / comprobante</th></tr></thead><tbody>{reportRows.map((r,i) => <tr key={r['ID empleado'] + r.Fecha + i}><td>{r.Fecha}</td><td>{r.Empleado}<small>{r['ID empleado']}</small></td><td>{r['Entrada esperada'] || '—'} / {r['Entrada registrada'] || '—'}</td><td>{r['Estado entrada']}</td><td>{r['Salida esperada'] || '—'} / {r['Salida registrada'] || '—'}</td><td>{r['Estado salida']}</td><td>{r.Dispositivo || '—'}</td><td>{(()=>{const rec=filtered.find(x=>x.employeeId===r['ID empleado'] && dateKey(x.timestamp)===r.Fecha && x.tipo==='entrada'); return rec ? <div>{rec.lateReason || '—'}{rec.lateReasonDetail ? ': '+rec.lateReasonDetail : ''}{rec.medicalProof?.data ? <button style={buttonStyle} onClick={()=>openProof(rec.medicalProof)}>Ver comprobante</button> : rec.lateReason==='Cita médica' ? <label className="proof-upload">Adjuntar después<input type="file" accept="image/*,.pdf" onChange={e=>uploadProof(rec.id,e.target.files?.[0])}/></label> : null}</div> : '—';})()}</td></tr>)}</tbody></table>{reportRows.length === 0 && <p className="admin-empty">No hay registros para estos filtros. Haz una marcación de prueba y pulsa Actualizar.</p>}</div>
