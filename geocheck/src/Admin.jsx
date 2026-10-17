@@ -163,7 +163,7 @@ export default function Admin({ onBack }) {
       XLSX.writeFile(wb, 'plantilla-carga-empleados-quia-check.xlsx');
     } else {
       const rows = [employeeTemplateHeaders, employeeTemplateHeaders.map(h => row[h] ?? '')];
-      const blob = new Blob(['\\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\\r\\n')], {type:'text/csv;charset=utf-8;'});
+      const blob = new Blob(['\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\r\n')], {type:'text/csv;charset=utf-8;'});
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a'); link.href=url; link.download='plantilla-carga-empleados-quia-check.csv'; link.click();
       URL.revokeObjectURL(url);
@@ -188,17 +188,17 @@ export default function Admin({ onBack }) {
         const valid = [];
         const textValue = value => String(value ?? '').trim();
         const isYes = value => ['si','sí','s','yes','true','1','x'].includes(textValue(value).toLowerCase());
-        const timeValid = value => /^([01]\\d|2[0-3]):[0-5]\\d$/.test(textValue(value));
+        const timeValid = value => /^([01]\d|2[0-3]):[0-5]\d$/.test(textValue(value));
         rows.forEach((row, index) => {
           const line = index + 2;
           const name = textValue(row['Nombre completo']);
-          const pin = textValue(row['NIP (4 dígitos)']).replace(/\\.0$/, '');
+          const pin = textValue(row['NIP (4 dígitos)']).replace(/\.0$/, '');
           const siteInput = textValue(row['Lugar asignado (nombre o ID)']);
           const site = sites.find(s => s.id === siteInput || s.name.toLowerCase() === siteInput.toLowerCase());
           const status = textValue(row['Estado del trabajador']) || 'Activo';
           const errorsForRow = [];
           if (!name) errorsForRow.push('falta Nombre completo');
-          if (!/^\\d{4}$/.test(pin)) errorsForRow.push('NIP debe tener 4 dígitos');
+          if (!/^\d{4}$/.test(pin)) errorsForRow.push('NIP debe tener 4 dígitos');
           if (pin && (existingPins.has(pin) || seenPins.has(pin))) errorsForRow.push('NIP duplicado');
           if (pin) seenPins.add(pin);
           if (!site || site.active === false) errorsForRow.push('Lugar asignado no existe o está inactivo');
