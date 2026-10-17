@@ -145,9 +145,10 @@ export default function App() {
     <header className="app-header">
       <div className="brand-mark" aria-hidden="true">⌖</div>
       <h1>GeoCheck Checador</h1>
-      <p>Registro de asistencia</p><button className="admin-open-button" onClick={() => setAdminMode(true)}>Administración</button>
+      <p>Registro de asistencia</p>
     </header>
-    <main className="content">
+    <nav className="home-tabs" aria-label="Sección principal"><button className={!adminMode ? "home-tab active" : "home-tab"} onClick={() => setAdminMode(false)}>Empleado</button><button className={adminMode ? "home-tab active" : "home-tab"} onClick={() => setAdminMode(true)}>Administrador</button></nav>
+    {!adminMode && <main className="content">
       <p className="required-legend"><span className="required-star">*</span> Información obligatoria</p>
       <div className="tabs">
         {['entrada', 'salida'].map(value => <button key={value} className={tipo === value ? 'tab active' : 'tab'} onClick={() => { setTipo(value); setCapturedPhoto(''); setLocationStatus('idle'); setLocationInfo(null); setMessage(''); }}>{value}</button>)}
@@ -192,7 +193,7 @@ export default function App() {
         {busy ? 'Registrando…' : `Registrar ${tipo}`}
       </button>
       <p className="footnote">La versión de demostración guarda los metadatos localmente en este navegador.</p>
-    </main>
+    </main>}
     {result && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="result-title">
       <div className="result-card">
         <div className="result-icon">✓</div><h2 id="result-title">¡Registro completado!</h2>
