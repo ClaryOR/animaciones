@@ -249,3 +249,106 @@ input:focus { border-color: #5278ad; box-shadow: 0 0 0 3px #dbeafe; }
  .bulk-file-label { width:100%; flex-direction:column; align-items:flex-start; border-radius:14px; }
  .bulk-file-label input { width:100%; }
 }
+
+
+/* Quia Check · identidad visual y experiencia profesional */
+:root {
+  --quia-violet: #5B3DF5;
+  --quia-coral: #FF6B4A;
+  --quia-ink: #0F1226;
+  --quia-mist: #F7F5FF;
+  --quia-lilac: #D5CCFF;
+  --quia-muted: #5D6078;
+  color: var(--quia-ink);
+  background: var(--quia-mist);
+}
+body { background: var(--quia-mist); color: var(--quia-ink); }
+button, input, select, textarea { transition: border-color .2s ease, box-shadow .22s ease, background-color .22s ease, color .22s ease, transform .22s cubic-bezier(.2,.8,.2,1); }
+button:hover:not(:disabled) { transform: translateY(-2px); }
+button:active:not(:disabled) { transform: translateY(0) scale(.985); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #8B74FF80; outline-offset: 2px; }
+@keyframes quia-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes quia-soft-in { from { opacity: 0; } to { opacity: 1; } }
+.app-shell { min-height: 100vh; padding: 28px 20px 56px; }
+.employee-app { background: radial-gradient(ellipse at 50% -20%, #D5CCFF80, transparent 54%), var(--quia-mist); }
+.app-header { position: relative; max-width: 820px; padding: 20px 16px 26px; margin-bottom: 8px; animation: quia-rise .45s ease both; }
+.app-header h1 { color: var(--quia-ink); font-size: clamp(30px, 4vw, 40px); font-weight: 800; letter-spacing: -.055em; }
+.app-header p { color: var(--quia-muted); font-size: 15px; }
+.brand-mark { width: 58px; height: 58px; border-radius: 18px; background: var(--quia-violet); color: white; box-shadow: 0 12px 26px #5B3DF52b; }
+.brand-mark svg { width: 36px; height: 36px; }
+.content { max-width: 760px; gap: 18px; animation: quia-rise .5s .04s ease both; }
+.panel, .result-card { border: 1px solid #E8E3FF; border-radius: 22px; background: rgba(255,255,255,.92); box-shadow: 0 12px 35px #29205b0a; padding: 22px; }
+.panel h2 { color: var(--quia-ink); font-size: 17px; letter-spacing: -.025em; }
+.tabs { padding: 5px; border: 1px solid #E7E1FF; background: #EFECFF; border-radius: 15px; }
+.tab { border-radius: 11px; color: var(--quia-muted); font-weight: 700; }
+.tab.active { background: white; color: var(--quia-violet); box-shadow: 0 4px 14px #21135b14; }
+input, select, textarea { border: 1px solid #DCD7F0; border-radius: 12px; background: #fff; color: var(--quia-ink); padding: 12px 14px; }
+input:focus, select:focus, textarea:focus { border-color: var(--quia-violet); box-shadow: 0 0 0 4px #5B3DF51a; outline: none; }
+.primary-button, .home-admin { background: var(--quia-violet); color: white; border: 1px solid var(--quia-violet); border-radius: 14px; font-weight: 750; box-shadow: 0 9px 20px #5B3DF526; }
+.primary-button:hover:not(:disabled), .home-admin:hover:not(:disabled) { background: #4930D6; box-shadow: 0 13px 25px #5B3DF538; }
+.secondary-button { background: white; color: var(--quia-violet); border: 1px solid #D8D0FF; border-radius: 13px; font-weight: 700; }
+.secondary-button:hover:not(:disabled) { background: #F0EDFF; border-color: var(--quia-violet); }
+.back-home-button { border-radius: 12px; background: white; color: var(--quia-violet); border: 1px solid #E2DCFF; padding: 10px 14px; }
+.status-box { border-radius: 13px; border: 1px solid #E4E0F2; background: #F8F7FC; padding: 13px 15px; }
+.status-box.inside { background: #EAF8F0; border-color: #B6E6CA; color: #146C43; }
+.status-box.outside, .status-box.error { background: #FFF0EC; border-color: #FFD0C4; color: #A53A22; }
+.camera-frame { border-radius: 18px; border: 1px dashed #C8BFFF; background: #F7F5FF; overflow: hidden; }
+.required-checklist { border-radius: 18px; background: white; border: 1px solid #E8E3FF; padding: 18px; }
+.home-content { animation: quia-rise .65s ease both; }
+.home-title { letter-spacing: -.06em; }
+.home-admin, .home-employee { min-height: 54px; border-radius: 15px; font-size: 15px; transition: transform .24s ease, box-shadow .24s ease, background .24s ease; }
+.home-employee { background: white; color: var(--quia-violet); border: 1px solid #DCD5FF; font-weight: 750; }
+.home-employee:hover { background: #F0EDFF; box-shadow: 0 12px 24px #0F122615; }
+.quia-wordmark span { text-transform: none; }
+.home-footer { color: #D8D3FF; }
+
+/* Administración: menú lateral persistente y panel de trabajo */
+.admin-theme { --admin-primary: #5B3DF5; --admin-ink: #0F1226; --admin-muted: #5D6078; color: var(--admin-ink); background: #F7F5FF; }
+.admin-shell.admin-theme { padding: 30px 34px 52px 286px; min-height: 100vh; }
+.admin-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; max-width: 1500px; margin: 0 auto 28px; padding: 8px 0 22px; border-bottom: 1px solid #E8E3FF; animation: quia-rise .4s ease both; }
+.admin-header h1 { color: #0F1226; font-size: clamp(28px, 3vw, 38px); font-weight: 800; letter-spacing: -.055em; margin: 6px 0; }
+.admin-header p:not(.admin-eyebrow) { color: #5D6078; margin-top: 7px; }
+.admin-eyebrow { color: #5B3DF5 !important; font-size: 11px; font-weight: 800; letter-spacing: .14em; }
+.admin-nav { position: fixed; z-index: 20; inset: 0 auto 0 0; width: 252px; padding: 28px 18px; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 8px; background: #0F1226; border-right: 1px solid #25243E; box-shadow: 10px 0 35px #1A16420A; }
+.admin-nav::before { content: "Quia Check"; display: block; padding: 8px 12px 28px 48px; color: #fff; font-size: 20px; font-weight: 800; letter-spacing: -.04em; background: no-repeat 8px 7px / 30px 30px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='20' cy='20' r='13' fill='none' stroke='%23fff' stroke-width='4'/%3E%3Cpath d='M29 29l11 11' stroke='%23FF6B4A' stroke-width='4' stroke-linecap='round'/%3E%3Ccircle cx='20' cy='20' r='4' fill='%23FF6B4A'/%3E%3C/svg%3E"); }
+.admin-nav button { width: 100%; min-height: 46px; text-align: left; padding: 12px 14px !important; border-radius: 12px !important; border: 1px solid transparent !important; background: transparent !important; color: #C8C6E2 !important; box-shadow: none !important; font-weight: 650; }
+.admin-nav button:hover { background: #24213F !important; color: white !important; transform: translateX(3px); }
+.admin-nav button[style*="background"] { background: #5B3DF5 !important; color: white !important; border-color: #806BFF !important; box-shadow: 0 8px 22px #5B3DF54A !important; }
+.admin-theme .admin-card { background: white; border: 1px solid #E8E3FF; border-radius: 20px; box-shadow: 0 10px 30px #20165308; padding: 24px; animation: quia-rise .38s ease both; }
+.admin-theme .admin-card h2 { color: #0F1226; font-size: 19px; letter-spacing: -.035em; }
+.admin-theme .admin-card h3 { color: #282443; }
+.admin-theme .admin-actions button, .admin-theme button { border-radius: 11px; }
+.admin-theme button[style*="background"] { box-shadow: 0 5px 14px #5B3DF51A; }
+.admin-theme button:hover:not(:disabled) { filter: brightness(.98); }
+.admin-theme input, .admin-theme select, .admin-theme textarea { width: 100%; margin-top: 6px; }
+.admin-theme input[type="checkbox"], .admin-theme input[type="file"] { width: auto; }
+.admin-theme .admin-grid { align-items: start; gap: 22px; }
+.admin-theme .admin-list-item { border-color: #EEEAFB; border-radius: 14px; padding: 15px; transition: background .2s ease, transform .2s ease; }
+.admin-theme .admin-list-item:hover { background: #FBFAFF; transform: translateY(-1px); }
+.admin-theme .admin-status { background: #EAF8F0; color: #167047; border-radius: 999px; padding: 4px 9px; }
+.admin-theme .admin-status.inactive { background: #FFF0EC; color: #A53A22; }
+.admin-theme .admin-table-wrap { border: 1px solid #E8E3FF; border-radius: 14px; }
+.admin-theme .admin-table th { background: #F2EFFF; color: #393354; }
+.admin-theme .bulk-title-row { align-items: flex-start; }
+.admin-theme .bulk-employees-card { margin-bottom: 22px; }
+.admin-theme .admin-notice { border-radius: 12px; }
+.admin-login-card { max-width: 460px !important; margin: 8vh auto !important; }
+@media (max-width: 900px) {
+  .admin-shell.admin-theme { padding: 20px 16px 36px; }
+  .admin-nav { position: sticky; inset: auto; width: 100%; padding: 10px; margin: 0 0 20px; border-radius: 16px; flex-direction: row; overflow-x: auto; gap: 6px; }
+  .admin-nav::before { display: none; }
+  .admin-nav button { flex: 0 0 auto; width: auto; white-space: nowrap; }
+  .admin-header { align-items: flex-start; flex-direction: column; }
+  .admin-header .admin-actions { flex-wrap: wrap; }
+}
+@media (max-width: 560px) {
+  .app-shell { padding: 18px 12px 34px; }
+  .panel, .result-card { padding: 17px; border-radius: 18px; }
+  .content { gap: 13px; }
+  .admin-theme .admin-card { padding: 17px; }
+  .admin-theme .admin-grid { grid-template-columns: 1fr; }
+  .admin-theme .bulk-title-row { display: flex; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
