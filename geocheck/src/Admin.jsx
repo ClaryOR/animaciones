@@ -313,17 +313,17 @@ export default function Admin({ onBack }) {
   const primary = { ...buttonStyle, background: '#5B3DF5', color: '#fff', borderColor: '#5B3DF5' };
 
   if (!authenticated) return <div className="admin-shell admin-theme"><section className="admin-card admin-login-card" style={{ maxWidth: 460, margin: '8vh auto' }}>
-    <p className="admin-eyebrow">GEOCHECK · ACCESO RESTRINGIDO</p><h1>{authExists ? 'Iniciar sesión' : 'Configurar administrador'}</h1>
+    <p className="admin-eyebrow">QUIA CHECK · ACCESO RESTRINGIDO</p><h1>{authExists ? 'Iniciar sesión' : 'Configurar administrador'}</h1>
     <p>{authExists ? 'Introduce tu usuario y contraseña de administrador.' : 'Crea el usuario y la contraseña inicial de administrador. La contraseña debe tener 6 caracteres alfanuméricos.'}</p>
     <form onSubmit={handleAuth}><label style={labelStyle}>Usuario<input style={fieldStyle} autoComplete="username" value={loginUser} onChange={e => setLoginUser(e.target.value)} required /></label>
       <label style={labelStyle}>Contraseña (6 caracteres alfanuméricos)<input style={fieldStyle} type="password" autoComplete={authExists ? 'current-password' : 'new-password'} minLength={6} maxLength={6} pattern="[A-Za-z0-9]{6}" value={loginPassword} onChange={e => setLoginPassword(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0,6))} required /></label>
       {authError && <p className="admin-notice" role="alert">{authError}</p>}
       <button style={primary} type="submit">{authExists ? 'Entrar al panel' : 'Guardar acceso y entrar'}</button>
-    </form><p className="admin-warning">Versión local de prueba: las credenciales se guardan en este navegador y no equivalen a autenticación segura de servidor.</p><button style={buttonStyle} onClick={onBack}>Volver al checador</button>
+    </form><p className="admin-warning">Versión local de prueba: las credenciales se guardan en este navegador y no equivalen a autenticación segura de servidor.</p><button style={buttonStyle} onClick={onBack}>Volver a Quia Check</button>
   </section></div>;
 
   return <div className="admin-shell admin-theme">
-    <header className="admin-header"><div><p className="admin-eyebrow">GEOCHECK · ADMINISTRACIÓN</p><h1>Panel de control</h1><p>Gestiona empleados, lugares de trabajo y reportes.</p></div><div className="admin-actions"><button style={buttonStyle} onClick={() => { setAuthenticated(false); setLoginPassword(''); }}>Bloquear panel</button><button style={buttonStyle} onClick={onBack}>Volver al checador</button></div></header>
+    <header className="admin-header"><div><p className="admin-eyebrow">QUIA CHECK · ADMINISTRACIÓN</p><h1>Panel de control</h1><p>Gestiona empleados, centros de trabajo y reportes desde un solo lugar.</p></div><div className="admin-actions"><button style={buttonStyle} onClick={() => { setAuthenticated(false); setLoginPassword(''); }}>Bloquear panel</button><button style={buttonStyle} onClick={onBack}>Volver al checador</button></div></header>
     <nav className="admin-nav">{[['employees','Empleados'],['sites','Lugares'],['reports','Historial y reportes']].map(([id,label]) => <button key={id} style={section === id ? primary : buttonStyle} onClick={() => { setSection(id); setNotice(''); }}>{label}</button>)}</nav>
     {notice && <p className="admin-notice" role="status">{notice}</p>}
     {section === 'employees' && <><section className="admin-card bulk-employees-card">
