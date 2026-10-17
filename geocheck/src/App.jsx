@@ -148,6 +148,7 @@ export default function App() {
       <p>Registro de asistencia</p><button className="admin-open-button" onClick={() => setAdminMode(true)}>Administración</button>
     </header>
     <main className="content">
+      <p className="required-legend"><span className="required-star">*</span> Información obligatoria</p>
       <div className="tabs">
         {['entrada', 'salida'].map(value => <button key={value} className={tipo === value ? 'tab active' : 'tab'} onClick={() => { setTipo(value); setCapturedPhoto(''); setLocationStatus('idle'); setLocationInfo(null); setMessage(''); }}>{value}</button>)}
       </div>
@@ -186,7 +187,7 @@ export default function App() {
         </div>
       </details>}
       {message && <p className="message" role="alert">{message}</p>}
-      <div className="required-checklist" aria-live="polite"><strong>Requisitos para registrar</strong><span className={employee ? 'check-ok' : 'check-pending'}>{employee ? '✓' : '×'} Empleado válido</span><span className={locationStatus === 'inside' && locationInfo?.inside ? 'check-ok' : 'check-pending'}>{locationStatus === 'inside' && locationInfo?.inside ? '✓' : '×'} Ubicación dentro del área</span><span className={capturedPhoto ? 'check-ok' : 'check-pending'}>{capturedPhoto ? '✓' : '×'} Foto capturada</span>{isLate && <span className={lateReason && (lateReason !== 'Otro' || lateOther.trim()) ? 'check-ok' : 'check-pending'}>{lateReason && (lateReason !== 'Otro' || lateOther.trim()) ? '✓' : '×'} Motivo del retraso</span>}</div>
+      <div className="required-checklist" aria-live="polite"><strong>Requisitos para registrar</strong><span className={tipo !== "entrada" || todaySchedule?.work ? "check-ok" : "check-pending"}>{tipo !== "entrada" || todaySchedule?.work ? "✓" : "×"} Horario laboral de hoy</span><span className={employee ? 'check-ok' : 'check-pending'}>{employee ? '✓' : '×'} Empleado válido</span><span className={locationStatus === 'inside' && locationInfo?.inside ? 'check-ok' : 'check-pending'}>{locationStatus === 'inside' && locationInfo?.inside ? '✓' : '×'} Ubicación dentro del área</span><span className={capturedPhoto ? 'check-ok' : 'check-pending'}>{capturedPhoto ? '✓' : '×'} Foto capturada</span>{isLate && <span className={lateReason && (lateReason !== 'Otro' || lateOther.trim()) ? 'check-ok' : 'check-pending'}>{lateReason && (lateReason !== 'Otro' || lateOther.trim()) ? '✓' : '×'} Motivo del retraso</span>}<p className="checklist-help">Completa los requisitos marcados con ×. Si el horario de hoy aparece pendiente, revisa los días y horas asignados al empleado en Administración.</p></div>
       <button className="primary-button" onClick={register} disabled={busy || !employee || pin.length !== 4 || locationStatus !== 'inside' || !locationInfo?.inside || !capturedPhoto || (!simulated && cameraStatus !== 'ready') || (isLate && (!lateReason || (lateReason === 'Otro' && !lateOther.trim())))}>
         {busy ? 'Registrando…' : `Registrar ${tipo}`}
       </button>
