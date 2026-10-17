@@ -10,6 +10,7 @@ export default function App() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [adminMode, setAdminMode] = useState(false);
+  const [homeScreen, setHomeScreen] = useState(true);
   const [pin, setPin] = useState('');
   const [mode, setMode] = useState('real');
   const [tipo, setTipo] = useState('entrada');
@@ -139,13 +140,34 @@ export default function App() {
     if (!simulated) startCamera();
   };
 
-  if (adminMode) return <div className="app-shell"><Admin onBack={() => setAdminMode(false)} /></div>;
+  if (adminMode) return <div className="app-shell"><Admin onBack={() => { setAdminMode(false); setHomeScreen(true); }} /></div>;
 
-  return <div className="app-shell">
+  if (homeScreen) return <div className="quia-home">
+    <div className="home-glow glow-left" aria-hidden="true"></div><div className="home-glow glow-right" aria-hidden="true"></div>
+    <div className="home-content">
+      <div className="quia-brand" aria-label="quia CHECK">
+        <svg className="quia-logo-symbol" viewBox="0 0 120 120" role="img" aria-label="Logo Quia"><circle cx="49" cy="49" r="36" fill="none" stroke="white" strokeWidth="15"/><path d="M75 75 L103 103" stroke="white" strokeWidth="15" strokeLinecap="round"/><circle cx="49" cy="49" r="9" fill="#FF6B4A"/></svg>
+        <div className="quia-wordmark"><span>quia</span><strong>CHECK</strong></div>
+      </div>
+      <p className="home-kicker">Registra tu asistencia</p>
+      <h1 className="home-title">¡Empecemos!</h1>
+      <nav className="home-actions" aria-label="Selecciona una sección">
+        <button className="home-admin" onClick={() => setAdminMode(true)}>Administración</button>
+        <button className="home-employee" onClick={() => { setHomeScreen(false); setAdminMode(false); }}>Empleado</button>
+      </nav>
+      <div className="home-check-illustration" aria-hidden="true">
+        <svg viewBox="0 0 300 300"><circle cx="132" cy="126" r="91" fill="none" stroke="white" strokeWidth="32"/><path d="M185 190 L256 261" stroke="#FF6B4A" strokeWidth="35" strokeLinecap="round"/><path d="M91 126 L120 155 L174 95" fill="none" stroke="#FF6B4A" strokeWidth="23" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </div>
+      <div className="home-footer"><span>Desarrollado por</span><span className="footer-mini-logo"><b>◉</b><strong>quia<small>DIGITAL</small></strong></span></div>
+    </div>
+  </div>;
+
+  return <div className="app-shell employee-app">
     <header className="app-header">
+      <button className="back-home-button" onClick={() => { setHomeScreen(true); stopCamera(); }}>← Inicio</button>
       <div className="brand-mark" aria-hidden="true">⌖</div>
       <h1>GeoCheck Checador</h1>
-      <p>Registro de asistencia</p><button className="admin-open-button" onClick={() => setAdminMode(true)}>Administración</button>
+      <p>Registro de asistencia</p>
     </header>
     <main className="content">
       <p className="required-legend"><span className="required-star">*</span> Información obligatoria</p>
