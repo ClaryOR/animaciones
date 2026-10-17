@@ -117,7 +117,8 @@ export default function Admin({ onBack }) {
     const rows = recordRows(filtered, employees, sites);
     const today = dateKey(new Date());
     const startDate = from || to || today;
-    const endDate = to || from || today;
+    const requestedEndDate = to || from || today;
+    const endDate = requestedEndDate > today ? today : requestedEndDate;
     const start = new Date(startDate + 'T12:00:00');
     const end = new Date(endDate + 'T12:00:00');
     const dayCount = Math.max(0, Math.min(366, Math.floor((end - start) / 86400000) + 1));
