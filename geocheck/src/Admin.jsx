@@ -104,6 +104,8 @@ export default function Admin({ onBack }) {
   const [to, setTo] = useState('');
   const [exportFormat, setExportFormat] = useState('xlsx');
   const [notice, setNotice] = useState('');
+  const [bulkPreview, setBulkPreview] = useState(null);
+  const [bulkFileName, setBulkFileName] = useState('');
 
   const persistEmployees = value => { setEmployees(value); save(EMP_KEY, value); };
   const persistSites = value => { setSites(value); save(SITE_KEY, value); };
@@ -128,6 +130,125 @@ export default function Admin({ onBack }) {
       else setAuthError('Usuario o contraseña incorrectos.');
     } catch { setAuthError('No se pudo validar el acceso.'); }
   }
+
+  const employeeTemplateHeaders = [
+    'Nombre completo','NIP (4 dígitos)','Lugar asignado (nombre o ID)','Cargo','Departamento','Estado del trabajador',
+    ...DAYS.flatMap(([, day]) => [`${day} trabaja (Sí/No)`, `${day} entrada (HH:MM)`, `${day} salida (HH:MM)`]),
+    'Retraso permitido al entrar (min)','Anticipación permitida al entrar (min)','Anticipación permitida al salir (min)','Retraso permitido al salir (min)'
+  ];
+  function employeeTemplateRow() {
+    const row = {
+      'Nombre completo':'','NIP (4 dígitos)':'','Lugar asignado (nombre o ID)':sites.find(s=>s.active!==false)?.name || '',
+      'Cargo':'','Departamento':'','Estado del trabajador':'Activo'
+    };
+    DAYS.forEach(([key, day]) => {
+      const work = !['sat','sun'].includes(key);
+      row[`${day} trabaja (Sí/No)`] = work ? 'Sí' : 'No';
+      row[`${day} entrada (HH:MM)`] = '08:00';
+      row[`${day} salida (HH:MM)`] = '17:00';
+    });
+    row['Retraso permitido al entrar (min)']=5;
+    row['Anticipación permitida al entrar (min)']=30;
+    row['Anticipación permitida al salir (min)']=5;
+    row['Retraso permitido al salir (min)']=30;
+    return row;
+  }
+  function downloadEmployeeTemplate(format) {
+    const row = employeeTemplateRow();
+    if (format === 'xlsx') {
+      const ws = XLSX.utils.json_to_sheet([row], { header: employeeTemplateHeaders });
+      ws['!cols'] = employeeTemplateHeaders.map(h => ({ wch: Math.max(16, Math.min(30, h.length + 2)) }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Empleados');
+      XLSX.writeFile(wb, 'plantilla-carga-empleados-quia-check.xlsx');
+    } else {
+      const rows = [employeeTemplateHeaders, employeeTemplateHeaders.map(h => row[h] ?? '')];
+      const blob = new Blob(['\\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\\r\\n')], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a'); link.href=url; link.download='plantilla-carga-empleados-quia-check.csv'; link.click();
+      URL.revokeObjectURL(url);
+    }
+    setNotice('Plantilla descargada. Completa una fila por empleado y vuelve a subir el archivo.');
+  }
+  function readBulkEmployees(file) {
+    if (!file) return;
+    setNotice('');
+    setBulkPreview(null);
+    setBulkFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = event => {
+      try {
+        const workbook = XLSX.read(event.target.result, {type:'array', cellDates:false});
+        const first = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(first, {defval:'', raw:false});
+        if (!rows.length) { setBulkPreview({rows:[], errors:['El archivo no contiene filas de empleados.'], valid:[]}); return; }
+        const existingPins = new Set(employees.map(e=>String(e.pin)));
+        const seenPins = new Set();
+        const errors = [];
+        const valid = [];
+        const textValue = value => String(value ?? '').trim();
+        const isYes = value => ['si','sí','s','yes','true','1','x'].includes(textValue(value).toLowerCase());
+        const timeValid = value => /^([01]\\d|2[0-3]):[0-5]\\d$/.test(textValue(value));
+        rows.forEach((row, index) => {
+          const line = index + 2;
+          const name = textValue(row['Nombre completo']);
+          const pin = textValue(row['NIP (4 dígitos)']).replace(/\\.0$/, '');
+          const siteInput = textValue(row['Lugar asignado (nombre o ID)']);
+          const site = sites.find(s => s.id === siteInput || s.name.toLowerCase() === siteInput.toLowerCase());
+          const status = textValue(row['Estado del trabajador']) || 'Activo';
+          const errorsForRow = [];
+          if (!name) errorsForRow.push('falta Nombre completo');
+          if (!/^\\d{4}$/.test(pin)) errorsForRow.push('NIP debe tener 4 dígitos');
+          if (pin && (existingPins.has(pin) || seenPins.has(pin))) errorsForRow.push('NIP duplicado');
+          if (pin) seenPins.add(pin);
+          if (!site || site.active === false) errorsForRow.push('Lugar asignado no existe o está inactivo');
+          if (!statuses.includes(status)) errorsForRow.push('Estado no válido');
+          const schedule = {};
+          DAYS.forEach(([key, day]) => {
+            const workValue = row[`${day} trabaja (Sí/No)`];
+            const work = isYes(workValue);
+            const start = textValue(row[`${day} entrada (HH:MM)`]) || '08:00';
+            const end = textValue(row[`${day} salida (HH:MM)`]) || '17:00';
+            if (work && !timeValid(start)) errorsForRow.push(`${day}: hora de entrada inválida`);
+            if (work && !timeValid(end)) errorsForRow.push(`${day}: hora de salida inválida`);
+            schedule[key] = {work, start, end};
+          });
+          const toleranceFields = [
+            ['late','Retraso permitido al entrar (min)',5],
+            ['earlyIn','Anticipación permitida al entrar (min)',30],
+            ['earlyOut','Anticipación permitida al salir (min)',5],
+            ['lateOut','Retraso permitido al salir (min)',30]
+          ];
+          const tolerances = {};
+          toleranceFields.forEach(([key, header, fallback]) => {
+            const raw = textValue(row[header]);
+            const value = raw === '' ? fallback : Number(raw);
+            if (!Number.isInteger(value) || value < 0 || value > 240) errorsForRow.push(`${header}: usa un número entre 0 y 240`);
+            tolerances[key] = value;
+          });
+          if (errorsForRow.length) errors.push(`Fila ${line}: ${errorsForRow.join('; ')}.`);
+          else valid.push(normalizeEmployee({
+            id:'EMP-' + (Date.now().toString().slice(-6)) + '-' + String(index+1).padStart(3,'0'),
+            name, pin, siteId:site.id, role:textValue(row['Cargo']), department:textValue(row['Departamento']),
+            status, active:status === 'Activo', schedule, tolerances
+          }));
+        });
+        setBulkPreview({rows, errors, valid});
+      } catch {
+        setBulkPreview({rows:[], errors:['No se pudo leer el archivo. Usa una plantilla CSV o Excel (.xlsx) descargada desde esta pantalla.'], valid:[]});
+      }
+    };
+    reader.onerror = () => setBulkPreview({rows:[],errors:['No se pudo leer el archivo seleccionado.'],valid:[]});
+    reader.readAsArrayBuffer(file);
+  }
+  function importBulkEmployees() {
+    if (!bulkPreview || bulkPreview.errors.length || !bulkPreview.valid.length) return;
+    const next = [...employees, ...bulkPreview.valid];
+    persistEmployees(next);
+    setBulkPreview(null); setBulkFileName('');
+    setNotice(`Carga completada: se agregaron ${next.length - employees.length} empleados. Los datos quedaron guardados en este navegador.`);
+  }
+
   function saveEmployee(event) {
     event.preventDefault();
     const name = employeeForm.name.trim(), pin = employeeForm.pin.trim();
@@ -186,12 +307,12 @@ export default function Admin({ onBack }) {
   function addReason(event) { event.preventDefault(); const label=reasonDraft.trim(); if(!label) return; if(reasons.some(r=>r.label.toLowerCase()===label.toLowerCase())) { setNotice('Ese motivo ya existe.'); return; } persistReasons([...reasons,{id:'REASON-'+Date.now(),label,active:true}]); setReasonDraft(''); setNotice('Motivo agregado.'); }
   function uploadProof(recordId,file) { if(!file) return; if(file.size>5*1024*1024) { setNotice('El archivo debe pesar 5 MB o menos.'); return; } const reader=new FileReader(); reader.onload=()=>{ const next=records.map(r=>r.id===recordId?{...r,medicalProof:{name:file.name,type:file.type,data:reader.result}}:r); setRecords(next); save(RECORD_KEY,next); setNotice('Comprobante adjuntado al registro.'); }; reader.readAsDataURL(file); }
   function openProof(proof) { if(!proof?.data) return; const w=window.open(); if(w && proof.type?.startsWith('image/')) w.document.write('<img alt="Comprobante médico" style="max-width:100%" src="'+proof.data+'"/>'); else if(w) w.location.href=proof.data; }
-  const fieldStyle = { width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '9px', marginTop: '5px' };
-  const labelStyle = { display: 'block', fontSize: '13px', marginBottom: '10px', color: '#334155' };
-  const buttonStyle = { border: '1px solid #cbd5e1', borderRadius: '9px', padding: '9px 12px', background: '#fff', color: '#12315a', fontWeight: 600 };
-  const primary = { ...buttonStyle, background: '#12315a', color: '#fff', borderColor: '#12315a' };
+  const fieldStyle = { width: '100%', padding: '10px 12px', border: '1px solid #D5CCFF', borderRadius: '10px', marginTop: '5px', background:'#fff', color:'#0F1226' };
+  const labelStyle = { display: 'block', fontSize: '13px', marginBottom: '10px', color: '#5D6078', fontWeight:600 };
+  const buttonStyle = { border: '1px solid #D5CCFF', borderRadius: '999px', padding: '10px 15px', background: '#fff', color: '#5B3DF5', fontWeight: 700 };
+  const primary = { ...buttonStyle, background: '#5B3DF5', color: '#fff', borderColor: '#5B3DF5' };
 
-  if (!authenticated) return <div className="admin-shell"><section className="admin-card" style={{ maxWidth: 460, margin: '8vh auto' }}>
+  if (!authenticated) return <div className="admin-shell admin-theme"><section className="admin-card admin-login-card" style={{ maxWidth: 460, margin: '8vh auto' }}>
     <p className="admin-eyebrow">GEOCHECK · ACCESO RESTRINGIDO</p><h1>{authExists ? 'Iniciar sesión' : 'Configurar administrador'}</h1>
     <p>{authExists ? 'Introduce tu usuario y contraseña de administrador.' : 'Crea el usuario y la contraseña inicial de administrador. La contraseña debe tener 6 caracteres alfanuméricos.'}</p>
     <form onSubmit={handleAuth}><label style={labelStyle}>Usuario<input style={fieldStyle} autoComplete="username" value={loginUser} onChange={e => setLoginUser(e.target.value)} required /></label>
@@ -201,11 +322,20 @@ export default function Admin({ onBack }) {
     </form><p className="admin-warning">Versión local de prueba: las credenciales se guardan en este navegador y no equivalen a autenticación segura de servidor.</p><button style={buttonStyle} onClick={onBack}>Volver al checador</button>
   </section></div>;
 
-  return <div className="admin-shell">
+  return <div className="admin-shell admin-theme">
     <header className="admin-header"><div><p className="admin-eyebrow">GEOCHECK · ADMINISTRACIÓN</p><h1>Panel de control</h1><p>Gestiona empleados, lugares de trabajo y reportes.</p></div><div className="admin-actions"><button style={buttonStyle} onClick={() => { setAuthenticated(false); setLoginPassword(''); }}>Bloquear panel</button><button style={buttonStyle} onClick={onBack}>Volver al checador</button></div></header>
     <nav className="admin-nav">{[['employees','Empleados'],['sites','Lugares'],['reports','Historial y reportes']].map(([id,label]) => <button key={id} style={section === id ? primary : buttonStyle} onClick={() => { setSection(id); setNotice(''); }}>{label}</button>)}</nav>
     {notice && <p className="admin-notice" role="status">{notice}</p>}
-    {section === 'employees' && <section className="admin-grid">
+    {section === 'employees' && <><section className="admin-card bulk-employees-card">
+      <div className="bulk-title-row"><div><p className="admin-eyebrow">CARGA MASIVA</p><h2>Importar empleados desde Excel o CSV</h2><p>Descarga la plantilla, completa una fila por empleado y súbela. Incluye los mismos datos del formulario manual: NIP, lugar, cargo, departamento, estado, horario semanal y tolerancias.</p></div><div className="bulk-download-actions"><button style={primary} type="button" onClick={()=>downloadEmployeeTemplate('xlsx')}>Descargar plantilla Excel</button><button style={buttonStyle} type="button" onClick={()=>downloadEmployeeTemplate('csv')}>Descargar plantilla CSV</button></div></div>
+      <div className="bulk-upload-row"><label className="bulk-file-label">Seleccionar archivo CSV o Excel<input type="file" accept=".csv,.xlsx,.xls" onChange={e=>readBulkEmployees(e.target.files?.[0])}/></label><span className="bulk-file-name">{bulkFileName || 'Ningún archivo seleccionado'}</span></div>
+      <p className="admin-warning">El lugar debe coincidir con el nombre o ID de un lugar activo ya registrado. Los NIP deben ser únicos y tener exactamente 4 dígitos. Si una fila tiene errores, no se importa ninguna fila hasta corregir el archivo.</p>
+      {bulkPreview && <div className="bulk-preview" aria-live="polite"><h3>Revisión del archivo</h3><p>Filas leídas: <strong>{bulkPreview.rows.length}</strong> · Válidas: <strong>{bulkPreview.valid.length}</strong> · Errores: <strong>{bulkPreview.errors.length}</strong></p>
+        {bulkPreview.errors.length > 0 && <div className="bulk-errors"><strong>Corrige lo siguiente:</strong><ul>{bulkPreview.errors.slice(0,30).map((error,i)=><li key={i}>{error}</li>)}</ul>{bulkPreview.errors.length>30 && <p>Se muestran los primeros 30 errores.</p>}</div>}
+        {bulkPreview.errors.length === 0 && bulkPreview.valid.length > 0 && <div className="bulk-success">El archivo está listo para importar {bulkPreview.valid.length} empleado(s).</div>}
+        <div className="admin-actions"><button type="button" style={primary} disabled={bulkPreview.errors.length>0 || !bulkPreview.valid.length} onClick={importBulkEmployees}>Importar {bulkPreview.valid.length} empleados</button><button type="button" style={buttonStyle} onClick={()=>{setBulkPreview(null);setBulkFileName('');}}>Cancelar</button></div>
+      </div>}
+    </section><section className="admin-grid">
       <form className="admin-card" onSubmit={saveEmployee}><h2>{employeeForm.id ? 'Editar empleado' : 'Agregar empleado'}</h2>
         <label style={labelStyle}>Nombre completo<input style={fieldStyle} value={employeeForm.name} onChange={e => setEmployeeForm({ ...employeeForm, name: e.target.value })} required /></label>
         <label style={labelStyle}>NIP (4 dígitos)<input style={fieldStyle} inputMode="numeric" maxLength={4} value={employeeForm.pin} onChange={e => setEmployeeForm({ ...employeeForm, pin: e.target.value.replace(/\D/g, '').slice(0,4) })} required /></label>
@@ -220,7 +350,7 @@ export default function Admin({ onBack }) {
         <div className="admin-actions"><button style={primary} type="submit">Guardar empleado</button><button style={buttonStyle} type="button" onClick={() => setEmployeeForm({ ...emptyEmployee(), siteId: sites[0]?.id || '' })}>Limpiar</button></div>
       </form>
       <section className="admin-card"><h2>Directorio ({employees.length})</h2>{employees.length === 0 && <p>No hay empleados registrados.</p>}<div className="admin-list">{employees.map(e => <article className="admin-list-item" key={e.id}><div><strong>{e.name}</strong><p>{e.id} · NIP {e.pin} · {sites.find(s => s.id === e.siteId)?.name || 'Sin lugar'}</p><p>{e.role || 'Sin cargo'} · {e.department || 'Sin departamento'}</p><span className={e.status === 'Activo' ? 'admin-status' : 'admin-status inactive'}>{e.status}</span></div><button style={buttonStyle} onClick={() => setEmployeeForm(normalizeEmployee(e))}>Editar</button></article>)}</div><p className="admin-warning">Demo local: NIP y datos se guardan en este navegador. No uses datos sensibles reales hasta configurar un servidor seguro.</p></section>
-    </section>}
+    </section></>}
     {section === 'sites' && <section className="admin-grid">
       <form className="admin-card" onSubmit={saveSite}><h2>{siteForm.id ? 'Editar lugar' : 'Agregar lugar'}</h2>
         <label style={labelStyle}>Nombre del lugar<input style={fieldStyle} value={siteForm.name} onChange={e => setSiteForm({ ...siteForm, name: e.target.value })} required /></label>
