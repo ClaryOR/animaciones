@@ -113,7 +113,38 @@ export default function Admin({ onBack }) {
     const date = dateKey(r.timestamp);
     return (!from || date >= from) && (!to || date <= to) && (!employeeFilter || r.employeeId === employeeFilter) && (!siteFilter || (r.siteId || '') === siteFilter);
   }), [records, from, to, employeeFilter, siteFilter]);
-  const reportRows = useMemo(() => recordRows(filtered, employees, sites), [filtered, employees, sites]);
+  const reportRows = useMemo(() => {
+    const rows = recordRows(filtered, employees, sites);
+    const today = dateKey(new Date());
+    const startDate = from || to || today;
+    const endDate = to || from || today;
+    const start = new Date(startDate + 'T12:00:00');
+    const end = new Date(endDate + 'T12:00:00');
+    const dayCount = Math.max(0, Math.min(366, Math.floor((end - start) / 86400000) + 1));
+    const attended = new Set(filtered.map(r => (r.employeeId || '') + '|' + dateKey(r.timestamp)));
+    const absences = [];
+    for (let offset = 0; offset < dayCount; offset++) {
+      const date = new Date(start);
+      date.setDate(start.getDate() + offset);
+      const dayKey = dateKey(date);
+      const weekday = ['sun','mon','tue','wed','thu','fri','sat'][date.getDay()];
+      employees.filter(e => e.status === 'Activo' && e.active !== false).forEach(e => {
+        const schedule = e.schedule?.[weekday];
+        if (!schedule?.work || attended.has(e.id + '|' + dayKey)) return;
+        absences.push({
+          'Fecha': dayKey, 'Empleado': e.name, 'ID empleado': e.id,
+          'Departamento': e.department || '', 'Cargo': e.role || '', 'Estado': e.status || 'Activo',
+          'Lugar': sites.find(s => s.id === e.siteId)?.name || '',
+          'Entrada esperada': schedule.start || '', 'Entrada registrada': '',
+          'Estado entrada': 'Ausente',
+          'Salida esperada': schedule.end || '', 'Salida registrada': '',
+          'Estado salida': 'Ausente', 'Dispositivo': '', 'Distancia (m)': '',
+          'Precisión GPS (m)': '', 'Motivo / comprobante': ''
+        });
+      });
+    }
+    return [...rows, ...absences].sort((a,b) => String(a.Fecha).localeCompare(String(b.Fecha)) || String(a.Empleado).localeCompare(String(b.Empleado)));
+  }, [filtered, employees, sites, from, to]);
 
   function handleAuth(event) {
     event.preventDefault(); setAuthError('');
@@ -249,6 +280,15 @@ export default function Admin({ onBack }) {
     setNotice(`Carga completada: se agregaron ${next.length - employees.length} empleados. Los datos quedaron guardados en este navegador.`);
   }
 
+  function deleteEmployee(employee) {
+    const confirmed = window.confirm(`¿Eliminar a ${employee.name} del directorio? Esta acción no se puede deshacer. Los registros de asistencia anteriores se conservarán.`);
+    if (!confirmed) return;
+    const next = employees.filter(e => e.id !== employee.id);
+    persistEmployees(next);
+    if (employeeForm.id === employee.id) setEmployeeForm({ ...emptyEmployee(), siteId: sites[0]?.id || '' });
+    setNotice(`Se eliminó a ${employee.name} del directorio. Se conservaron sus registros históricos.`);
+  }
+
   function saveEmployee(event) {
     event.preventDefault();
     const name = employeeForm.name.trim(), pin = employeeForm.pin.trim();
@@ -349,7 +389,7 @@ export default function Admin({ onBack }) {
         {[['late','Retraso permitido al entrar'],['earlyIn','Anticipación permitida al entrar'],['earlyOut','Anticipación permitida al salir'],['lateOut','Retraso permitido al salir']].map(([key,label]) => <label key={key} style={labelStyle}>{label}<input style={fieldStyle} type="number" min="0" max="240" value={employeeForm.tolerances?.[key] ?? 0} onChange={e => setEmployeeForm(f => ({ ...f, tolerances: { ...f.tolerances, [key]: Number(e.target.value) } }))} required /></label>)}
         <div className="admin-actions"><button style={primary} type="submit">Guardar empleado</button><button style={buttonStyle} type="button" onClick={() => setEmployeeForm({ ...emptyEmployee(), siteId: sites[0]?.id || '' })}>Limpiar</button></div>
       </form>
-      <section className="admin-card"><h2>Directorio ({employees.length})</h2>{employees.length === 0 && <p>No hay empleados registrados.</p>}<div className="admin-list">{employees.map(e => <article className="admin-list-item" key={e.id}><div><strong>{e.name}</strong><p>{e.id} · NIP {e.pin} · {sites.find(s => s.id === e.siteId)?.name || 'Sin lugar'}</p><p>{e.role || 'Sin cargo'} · {e.department || 'Sin departamento'}</p><span className={e.status === 'Activo' ? 'admin-status' : 'admin-status inactive'}>{e.status}</span></div><button style={buttonStyle} onClick={() => setEmployeeForm(normalizeEmployee(e))}>Editar</button></article>)}</div><p className="admin-warning">Demo local: NIP y datos se guardan en este navegador. No uses datos sensibles reales hasta configurar un servidor seguro.</p></section>
+      <section className="admin-card"><h2>Directorio ({employees.length})</h2>{employees.length === 0 && <p>No hay empleados registrados.</p>}<div className="admin-list">{employees.map(e => <article className="admin-list-item" key={e.id}><div><strong>{e.name}</strong><p>{e.id} · NIP {e.pin} · {sites.find(s => s.id === e.siteId)?.name || 'Sin lugar'}</p><p>{e.role || 'Sin cargo'} · {e.department || 'Sin departamento'}</p><span className={e.status === 'Activo' ? 'admin-status' : 'admin-status inactive'}>{e.status}</span></div><div className="admin-actions"><button type="button" style={buttonStyle} onClick={() => setEmployeeForm(normalizeEmployee(e))}>Editar</button><button type="button" style={{...buttonStyle, color:'#B42318', borderColor:'#F3B5AE'}} onClick={() => deleteEmployee(e)}>Eliminar</button></div></article>)}</div><p className="admin-warning">Demo local: NIP y datos se guardan en este navegador. No uses datos sensibles reales hasta configurar un servidor seguro.</p></section>
     </section></>}
     {section === 'sites' && <section className="admin-grid">
       <form className="admin-card" onSubmit={saveSite}><h2>{siteForm.id ? 'Editar lugar' : 'Agregar lugar'}</h2>
@@ -364,7 +404,7 @@ export default function Admin({ onBack }) {
       </form>
       <section className="admin-card"><h2>Lugares registrados ({sites.length})</h2><div className="admin-list">{sites.map(s => <article className="admin-list-item" key={s.id}><div><strong>{s.name}</strong><p>{s.lat}, {s.lng} · Radio {s.radiusM} m · Accuracy ±{s.accuracyM ?? 100} m</p><span className={s.active === false ? 'admin-status inactive' : 'admin-status'}>{s.active === false ? 'Inactivo' : 'Activo'}</span></div><button style={buttonStyle} onClick={() => setSiteForm({ ...s, lat: String(s.lat), lng: String(s.lng), radiusM: String(s.radiusM), accuracyM: String(s.accuracyM ?? 100) })}>Editar</button></article>)}</div></section>
     </section>}
-    {section === 'reasons' && <section className="admin-card"><h2>Motivos de retraso</h2><p>Estas opciones aparecerán al empleado cuando el sistema detecte una entrada tardía. La opción Otro exige una explicación.</p><form onSubmit={addReason} className="admin-actions"><input style={{...fieldStyle,maxWidth:360}} value={reasonDraft} onChange={e=>setReasonDraft(e.target.value)} placeholder="Nuevo motivo" required maxLength={80}/><button style={primary} type="submit">Agregar motivo</button></form><div className="admin-list">{reasons.map(reason=><article className="admin-list-item" key={reason.id}><div><strong>{reason.label}</strong><p>{reason.active===false?'Desactivado':'Disponible para empleados'}</p></div><div className="admin-actions">{reason.label!=='Otro' && <button style={buttonStyle} onClick={()=>{const nextLabel=window.prompt('Editar motivo',reason.label); if(nextLabel?.trim()) persistReasons(reasons.map(r=>r.id===reason.id?{...r,label:nextLabel.trim()}:r));}}>Editar</button>}<button style={buttonStyle} onClick={()=>persistReasons(reasons.map(r=>r.id===reason.id?{...r,active:r.active===false}:r))}>{reason.active===false?'Activar':'Desactivar'}</button></div></article>)}</div><p className="admin-warning">Los cambios se guardan en este navegador. La opción Otro se mantiene como opción especial para exigir explicación.</p></section>}\n    {section === 'reports' && <section className="admin-card"><div className="admin-report-heading"><div><h2>Historial de asistencia</h2><p>{reportRows.length} día(s) de asistencia con los filtros seleccionados.</p></div><div className="admin-actions"><button style={buttonStyle} onClick={refreshRecords}>Actualizar</button></div></div>
+    {section === 'reasons' && <section className="admin-card"><h2>Motivos de retraso</h2><p>Estas opciones aparecerán al empleado cuando el sistema detecte una entrada tardía. La opción Otro exige una explicación.</p><form onSubmit={addReason} className="admin-actions"><input style={{...fieldStyle,maxWidth:360}} value={reasonDraft} onChange={e=>setReasonDraft(e.target.value)} placeholder="Nuevo motivo" required maxLength={80}/><button style={primary} type="submit">Agregar motivo</button></form><div className="admin-list">{reasons.map(reason=><article className="admin-list-item" key={reason.id}><div><strong>{reason.label}</strong><p>{reason.active===false?'Desactivado':'Disponible para empleados'}</p></div><div className="admin-actions">{reason.label!=='Otro' && <button style={buttonStyle} onClick={()=>{const nextLabel=window.prompt('Editar motivo',reason.label); if(nextLabel?.trim()) persistReasons(reasons.map(r=>r.id===reason.id?{...r,label:nextLabel.trim()}:r));}}>Editar</button>}<button style={buttonStyle} onClick={()=>persistReasons(reasons.map(r=>r.id===reason.id?{...r,active:r.active===false}:r))}>{reason.active===false?'Activar':'Desactivar'}</button></div></article>)}</div><p className="admin-warning">Los cambios se guardan en este navegador. La opción Otro se mantiene como opción especial para exigir explicación.</p></section>}\n    {section === 'reports' && <section className="admin-card"><div className="admin-report-heading"><div><h2>Historial de asistencia</h2><p>{reportRows.length} fila(s) de asistencia y ausencias con los filtros seleccionados.</p></div><div className="admin-actions"><button style={buttonStyle} onClick={refreshRecords}>Actualizar</button></div></div>
       <div className="admin-filters"><label style={labelStyle}>Desde<input style={fieldStyle} type="date" value={from} onChange={e => setFrom(e.target.value)} /></label><label style={labelStyle}>Hasta<input style={fieldStyle} type="date" value={to} onChange={e => setTo(e.target.value)} /></label><label style={labelStyle}>Empleado<select style={fieldStyle} value={employeeFilter} onChange={e => setEmployeeFilter(e.target.value)}><option value="">Todos</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label><label style={labelStyle}>Lugar<select style={fieldStyle} value={siteFilter} onChange={e => setSiteFilter(e.target.value)}><option value="">Todos</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label></div>
       <label style={labelStyle}>Formato de exportación<select style={fieldStyle} value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV</option><option value="pdf">PDF</option></select></label>
       <button style={primary} onClick={exportReport}>Exportar reporte</button>
