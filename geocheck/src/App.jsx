@@ -191,7 +191,7 @@ export default function App() {
       </section>
       <section className="panel">
         {canChooseSite && <label className="site-choice-label">Ubicación para esta entrada<select value={selectedSiteId || employee?.siteId || ''} onChange={e=>{setSelectedSiteId(e.target.value);setLocationStatus('idle');setLocationInfo(null);setCapturedPhoto('');setMessage('');}}><option value={employee?.siteId || ''}>Lugar asignado al empleado</option>{activeSites.filter(site=>site.id!==employee?.siteId).map(site=><option key={site.id} value={site.id}>{site.name}</option>)}{employee?.allowUnregisteredSite && <option value="__unregistered__">Lugar no registrado (trabajo de campo)</option>}</select><p className="hint">Puedes seleccionar otro lugar activo. Para «Lugar no registrado» se guardará la posición GPS actual sin comprobar un perímetro registrado.</p></label>}
-        <div className="panel-heading"><h2>2. Ubicación <span className="required-star" aria-label="obligatorio">*</span></h2><span className="pill">{workSite.name}</span></div>
+        <div className="panel-heading"><h2>2. Ubicación <span className="required-star" aria-label="obligatorio">*</span></h2><span className="pill">{fieldLocation ? "Lugar no registrado" : workSite.name}</span></div>
         <p className="hint">{fieldLocation ? 'Lugar no registrado: se guardará la posición GPS actual.' : `Radio permitido: ${workSite.radiusM} m · Accuracy máximo: ${workSite.accuracyM ?? 100} m`}</p>
         <div className={`status-box ${locationStatus}`}>
           {locationStatus === 'checking' ? 'Consultando ubicación…' :
