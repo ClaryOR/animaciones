@@ -1,15 +1,13 @@
 const KEY = 'geocheck:registros';
 
-// DEMO: guarda metadatos en localStorage, no la foto. Sustituir por una API segura
-// antes de producción; el servidor debe validar PIN, ubicación y evidencia.
+// DEMO local: no sustituye una API segura con almacenamiento de servidor.
 export async function submitAttendance(record) {
-  const { photo, ...meta } = record;
   try {
     const list = JSON.parse(localStorage.getItem(KEY) || '[]');
-    list.unshift(meta);
+    list.unshift(record);
     localStorage.setItem(KEY, JSON.stringify(list.slice(0, 200)));
   } catch {
-    // El almacenamiento puede estar deshabilitado.
+    throw new Error('No se pudo guardar el registro. El almacenamiento del navegador puede estar lleno; intenta retirar archivos adjuntos grandes.');
   }
   return { ok: true };
 }
