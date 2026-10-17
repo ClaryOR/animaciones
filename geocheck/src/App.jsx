@@ -89,7 +89,7 @@ export default function App() {
 
   const capturePhoto = () => {
     const now = new Date();
-    const lines = [`GeoCheck · ${workSite.name} · ${tipo}`, `${capitalize(formatDay(now))} · ${formatTime(now)}`];
+    const lines = [`Quia Check · ${workSite.name} · ${tipo}`, `${capitalize(formatDay(now))} · ${formatTime(now)}`];
     if (cameraStatus === 'ready' && videoRef.current?.videoWidth) {
       const video = videoRef.current;
       const canvas = document.createElement('canvas');
@@ -149,9 +149,9 @@ export default function App() {
   if (homeScreen) return <div className="quia-home">
     <div className="home-glow glow-left" aria-hidden="true"></div><div className="home-glow glow-right" aria-hidden="true"></div>
     <div className="home-content">
-      <div className="quia-brand" aria-label="quia CHECK">
+      <div className="quia-brand" aria-label="Quia Check">
         <svg className="quia-logo-symbol" viewBox="0 0 120 120" role="img" aria-label="Logo Quia"><circle cx="49" cy="49" r="36" fill="none" stroke="white" strokeWidth="15"/><path d="M75 75 L103 103" stroke="white" strokeWidth="15" strokeLinecap="round"/><circle cx="49" cy="49" r="9" fill="#FF6B4A"/></svg>
-        <div className="quia-wordmark"><span>quia</span><strong>CHECK</strong></div>
+        <div className="quia-wordmark"><span>Quia</span><strong>Check</strong></div>
       </div>
       <p className="home-kicker">Registra tu asistencia</p>
       <h1 className="home-title">¡Empecemos!</h1>
@@ -169,8 +169,8 @@ export default function App() {
   return <div className="app-shell employee-app">
     <header className="app-header">
       <button className="back-home-button" onClick={() => { setHomeScreen(true); stopCamera(); }}>← Inicio</button>
-      <div className="brand-mark" aria-hidden="true">⌖</div>
-      <h1>GeoCheck Checador</h1>
+      <div className="brand-mark" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="20" cy="20" r="13" fill="none" stroke="currentColor" strokeWidth="4"/><path d="M29 29l11 11" stroke="#FF6B4A" strokeWidth="4" strokeLinecap="round"/><path d="M14 20l4 4 8-9" fill="none" stroke="#FF6B4A" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+      <h1>Quia Check</h1>
       <p>Registro de asistencia</p>
     </header>
     <main className="content">
