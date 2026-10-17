@@ -23,13 +23,13 @@ export default function App() {
   const [lateReason, setLateReason] = useState('');
   const [lateOther, setLateOther] = useState('');
   const [medicalProof, setMedicalProof] = useState(null);
+  const simulated = mode !== 'real';
+  const employee = getActiveEmployeeByPin(pin);
+  const activeSites = getActiveSites();
   const lateReasons = getLateReasons();
   const todaySchedule = employee?.schedule?.[['sun','mon','tue','wed','thu','fri','sat'][new Date().getDay()]];
   const lateMinutes = todaySchedule?.work ? Math.floor((Date.now() - new Date(new Date().toDateString() + ' ' + todaySchedule.start).getTime()) / 60000) : 0;
   const isLate = tipo === 'entrada' && Boolean(todaySchedule?.work) && lateMinutes > Number(employee?.tolerances?.late ?? 5);
-  const simulated = mode !== 'real';
-  const employee = getActiveEmployeeByPin(pin);
-  const activeSites = getActiveSites();
   const workSite = activeSites.find(site => site.id === employee?.siteId) || activeSites[0] || WORK_SITE;
 
   const stopCamera = useCallback(() => {
