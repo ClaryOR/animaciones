@@ -24,6 +24,7 @@ export default function App() {
   const [lateReason, setLateReason] = useState('');
   const [lateOther, setLateOther] = useState('');
   const [dayOffReason, setDayOffReason] = useState('');
+  const [selectedSiteId, setSelectedSiteId] = useState('');
   const [medicalProof, setMedicalProof] = useState(null);
   const [capturedPhoto, setCapturedPhoto] = useState('');
   const simulated = mode !== 'real';
@@ -33,7 +34,10 @@ export default function App() {
   const todaySchedule = employee?.schedule?.[['sun','mon','tue','wed','thu','fri','sat'][new Date().getDay()]];
   const lateMinutes = todaySchedule?.work ? Math.floor((Date.now() - new Date(new Date().toDateString() + ' ' + todaySchedule.start).getTime()) / 60000) : 0;
   const isLate = tipo === 'entrada' && Boolean(todaySchedule?.work) && lateMinutes > Number(employee?.tolerances?.late ?? 5);
-  const workSite = activeSites.find(site => site.id === employee?.siteId) || activeSites[0] || WORK_SITE;
+  const assignedSite = activeSites.find(site => site.id === employee?.siteId) || activeSites[0] || WORK_SITE;
+  const canChooseSite = Boolean(employee?.allowSiteSelection && tipo === 'entrada');
+  const fieldLocation = Boolean(canChooseSite && employee?.allowUnregisteredSite && selectedSiteId === '__unregistered__');
+  const workSite = (canChooseSite && selectedSiteId && selectedSiteId !== '__unregistered__' ? activeSites.find(site => site.id === selectedSiteId) : null) || assignedSite;
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(track => track.stop());
@@ -77,7 +81,7 @@ export default function App() {
     setMessage('');
     try {
       const position = await getPosition(mode, workSite);
-      const evaluated = evaluateArea(position, { ...workSite, accuracyM: workSite.accuracyM ?? 100 });
+      const evaluated = fieldLocation ? { pos: position, distance: 0, accuracy: position.accuracy, inside: true, field: true } : evaluateArea(position, { ...workSite, accuracyM: workSite.accuracyM ?? 100 });
       setLocationInfo(evaluated);
       setLocationStatus(evaluated.inside ? 'inside' : 'outside');
       return evaluated;
@@ -86,11 +90,11 @@ export default function App() {
       setMessage(err.message || 'No se pudo obtener la ubicación.');
       return null;
     }
-  }, [mode, workSite]);
+  }, [mode, workSite, fieldLocation]);
 
   const capturePhoto = () => {
     const now = new Date();
-    const lines = [`GeoCheck · ${workSite.name} · ${tipo}`, `${capitalize(formatDay(now))} · ${formatTime(now)}`];
+    const lines = [`GeoCheck · ${fieldLocation ? 'Lugar no registrado' : workSite.name} · ${tipo}`, `${capitalize(formatDay(now))} · ${formatTime(now)}`];
     if (cameraStatus === 'ready' && videoRef.current?.videoWidth) {
       const video = videoRef.current;
       const canvas = document.createElement('canvas');
@@ -128,10 +132,10 @@ export default function App() {
       const now = new Date();
       const record = {
         id: globalThis.crypto?.randomUUID?.() ?? String(now.getTime()),
-        tipo, employeeId: employee.id, name: employee.name, siteName: workSite.name, siteId: workSite.id,
-        inside: true, distance: area.distance, accuracy: area.accuracy, device: navigator.userAgent || 'Dispositivo no identificado', timestamp: now.toISOString(), photo,
+        tipo, employeeId: employee.id, name: employee.name, siteName: fieldLocation ? 'Lugar no registrado' : workSite.name, siteId: fieldLocation ? '' : workSite.id,
+        lat: area.pos?.lat, lng: area.pos?.lng, inside: true, distance: area.distance, accuracy: area.accuracy, device: navigator.userAgent || 'Dispositivo no identificado', timestamp: now.toISOString(), photo,
         late: isLate, lateReason: isLate ? lateReason : '', lateReasonDetail: isLate && lateReason === 'Otro' ? lateOther.trim() : '', medicalProof: medicalProof || null,
-        dayOffWork: tipo === 'entrada' && !todaySchedule?.work, dayOffReason: tipo === 'entrada' && !todaySchedule?.work ? dayOffReason.trim() : ''
+        fieldLocation, dayOffWork: tipo === 'entrada' && !todaySchedule?.work, dayOffReason: tipo === 'entrada' && !todaySchedule?.work ? dayOffReason.trim() : ''
       };
       await submitAttendance(record);
       stopCamera();
@@ -182,12 +186,13 @@ export default function App() {
       </div>
       <section className="panel">
         <h2>1. NIP del empleado <span className="required-star" aria-label="obligatorio">*</span></h2>
-        <input aria-label="NIP de cuatro dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={pin} onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setMessage(''); setCapturedPhoto(''); }} placeholder="Introduce 4 dígitos" />
+        <input aria-label="NIP de cuatro dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={pin} onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setSelectedSiteId(''); setMessage(''); setCapturedPhoto(''); }} placeholder="Introduce 4 dígitos" />
         <p className={employee ? 'hint success' : 'hint'}>{employee ? `Empleado: ${employee.name}` : 'Introduce tu NIP de empleado activo'}</p>
       </section>
       <section className="panel">
+        {canChooseSite && <label className="site-choice-label">Ubicación para esta entrada<select value={selectedSiteId || employee?.siteId || ''} onChange={e=>{setSelectedSiteId(e.target.value);setLocationStatus('idle');setLocationInfo(null);setCapturedPhoto('');setMessage('');}}><option value={employee?.siteId || ''}>Lugar asignado al empleado</option>{activeSites.filter(site=>site.id!==employee?.siteId).map(site=><option key={site.id} value={site.id}>{site.name}</option>)}{employee?.allowUnregisteredSite && <option value="__unregistered__">Lugar no registrado (trabajo de campo)</option>}</select><p className="hint">Puedes seleccionar otro lugar activo. Para «Lugar no registrado» se guardará la posición GPS actual sin comprobar un perímetro registrado.</p></label>}
         <div className="panel-heading"><h2>2. Ubicación <span className="required-star" aria-label="obligatorio">*</span></h2><span className="pill">{workSite.name}</span></div>
-        <p className="hint">Radio permitido: {workSite.radiusM} m · Accuracy máximo: {workSite.accuracyM ?? 100} m</p>
+        <p className="hint">{fieldLocation ? 'Lugar no registrado: se guardará la posición GPS actual.' : `Radio permitido: ${workSite.radiusM} m · Accuracy máximo: ${workSite.accuracyM ?? 100} m`}</p>
         <div className={`status-box ${locationStatus}`}>
           {locationStatus === 'checking' ? 'Consultando ubicación…' :
            locationStatus === 'inside' ? `Dentro del área · ${locationInfo?.distance} m · precisión ±${locationInfo?.accuracy} m` :
@@ -226,7 +231,7 @@ export default function App() {
       <div className="result-card">
         <div className="result-icon">✓</div><h2 id="result-title">¡Registro completado!</h2>
         <p><strong>{result.name}</strong></p><p>{result.tipo === 'entrada' ? 'Entrada' : 'Salida'} · {new Date(result.timestamp).toLocaleString('es-VE')}</p>
-        <p className="hint">{result.siteName} · {result.distance} m del centro</p>{result.late && <p className="hint">Retraso: {result.lateReason}{result.lateReasonDetail ? ' — ' + result.lateReasonDetail : ''}</p>}{result.dayOffWork && <p className="hint"><strong>Entrada en día libre.</strong> Motivo: {result.dayOffReason}</p>}
+        <p className="hint">{result.siteName} · {result.fieldLocation ? 'GPS de campo' : `${result.distance} m del centro`}</p>{result.late && <p className="hint">Retraso: {result.lateReason}{result.lateReasonDetail ? ' — ' + result.lateReasonDetail : ''}</p>}{result.dayOffWork && <p className="hint"><strong>Entrada en día libre.</strong> Motivo: {result.dayOffReason}</p>}
         <button className="primary-button" onClick={closeResult}>Continuar</button>
       </div>
     </div>}
